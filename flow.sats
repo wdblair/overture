@@ -3,62 +3,95 @@
   type indexed by the flat type that appears in the flow, the period with which a value of
   that type becomes available, and the flow's phase offset.
   
-  We limit all task periods as integers as that fits the constraints of schedulability 
-  analysis. Phase offsets are allowed to be rational. The addition of a rational type in
-  the statics is made possible by using an SMT solver such as Z3 as our constraint solver
-  during type checking.
+  We limit all task periods as natural numbers as a discrete time model is required by the
+  scheduling theory and most real time operating systems. Task phases are allowed to be rational, 
+  under the constraint that the release time for the task is a natural number (i.e. it is a valid date). 
+  The addition of a rational type in the statics is made possible by using an SMT solver such as Z3 as 
+  our constraint solver during type checking.
 *)
 
-(**
-  Declare a rational static type and its constructors.
-*)
-datasort rat =
-  | Rational of (int)
-  | RationalDiv of (int, int)
+staload "rat.sats"
 
 (**
-  Provide static functions on rational numbers.
-*)
-stacst mul_rat_rat : rat -> rat -> rat
-stadef * = mul_rat_rat
-
-stacst add_rat_rat : rat -> rat -> rat
-stadef + = add_rat_rat
-
-(**
-  A built-in function provided by Z3
+  A simple flow data type
   
-  Example:
-  (assert (is_int 0.0))
+  Values of type a only occur at times t_0, t_1,... where for all i >= 0
+  t_{i+1} - t_i = n and t_0 = n*p.
 *)
-stacst is_int : rat -> bool
-
-stadef is_nat (n) = is_int (n) && n >= 0
+absvt@ype flow (a:t@ype, n: int, p: rat)
 
 (**
-  The flow data type
+  A _strictly_ periodic flow
+  
+  Values of type a _always_ occur at times t_0, t_1, ... where for all i >=0
+  t_{i+1} - t_i = n and t_0 = n*p.
 *)
-absvt@ype flow (a:t@ype, rate: int, phase: rat)
+absvt@ype strict_flow (a:t@ype, n: int, p: rat)
 
 (**
-  The flow transformations as specified by prelude
+  The strictly periodc flow transformation operators as specified by prelude
 *)
-stacst divides_int_int : int -> int -> bool
-stadef divides = divides_int_int
 
-stadef divides (a:int, b:int) = (b mod a == 0)
-
+(**
+  Dividing a periodic clock by k is equivalent to sampling 
+  its every kth occurence of the clock (undersampling).
+*)
 fun
-flow_divide_clock {a:t@ype} {period,k:pos} {phase:rat} (
-  flow (a, period, phase), int k
-): flow (a, period * k, phase / k)
+flow_divide_clock {a:t@ype} {n,k:pos} {p:rat | is_nat(Rational(n)*p)} (
+  strict_flow (a, n, k), int k
+): strict_flow (a, n * k, p / k)
 
+(**
+  Multiplying a periodic clock by k is equivalent to sampling
+  every k times more of the clock (oversampling).
+*)
 fun
-flow_multiply_clock {a:t@ype} {period,k:pos | divides(d, period)} {phase:rat} (
-  flow (a, period, phase), int k
-): flow (a, period / k, phase * k)
+flow_multiply_clock {a:t@ype} {n,k:pos | divides(k, n)} {p:rat | is_nat(Rational(n)*p)} (
+  strict_flow (a, n, p), int k
+): strict_flow (a, n / k, p * k)
 
+(**
+  A phase shift moves the release time of a task by some fraction of its period.
+*)
 fun
-flow_shift_phase {a:t@ype} {period:pos} {phase,k:rat | is_nat((phase + k)*Rational(period))} (
-  flow (a, period, phase), int k
-): flow (a, period, phase + k)
+flow_shift_phase {a:t@ype} {n:pos} {p,k:rat | is_nat((p + k)*Rational(n))} (
+  strict_flow (a, n, p), int k
+): strict_flow (a, n, p + k)
+
+(**
+  Drop the first value of a flow. This is equivalent to a clock with phase shift 1
+*)
+fun
+flow_tail {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
+  strict_flow (a, n, p)
+): strict_flow (a, n, p + 1)
+
+
+(**
+  Concat a value to the head of the flow.
+*)
+fun
+flow_concat {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
+  a, strict_flow (a, n, p)
+): strict_flow (a, n, p - 1)
+
+(**
+  Using when on two strictly periodic clocks yields a new clock that
+  is x_i if at time t_i activate_i evaluates to true and undefined
+  otherwise.
+*)
+fun
+flow_when {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
+  activate: strict_flow (bool, n, p), x: strict_flow (a, n, p)
+): flow (a, n, p)
+
+
+(**
+  Combining two flows under complementary boolean clocks. The new
+  flow's value at date t_i is defined as on_i if c_i is true and off_i
+  otherwise.
+*)
+fun
+flow_merge {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
+  c: strict_flow (bool, n, p), on: strict_flow (a, n, p), off: strict_flow (a,n,p)
+): strict_flow (a, n, p)

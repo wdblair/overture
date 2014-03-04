@@ -56,18 +56,19 @@ clock attributed to a flow is somewhat trivial. Indeed, the type system of
 ATS is very feature rich and can capture invariants encompassing multiple
 programming paradigms. These features come with quite a steep learning curve,
 however, and so a novice may be unable to see when and where they could
-be effectively applied. ATS could seem quite attractive for someone aiming
-to build a language with much more narrow scope but that aims to unify
-program implementation with specification. For people that aspire to build such 
-languages, we want to provide ATS as a meta-language to help them quickly
-build robust compilers. We hope to facilitate this use case of ATS by doing
-an example implementation of Prelude.
+be effectively applied. On the other hand, ATS could seem quite attractive 
+for someone aiming to build a language with much more narrow scope but still
+aims to unify a program's implementation with its formal specification. For 
+people that aspire to build such languages, we want to provide ATS as a 
+meta-language to help them quickly build robust compilers. We believe ATS
+is capable of filling this role, and we hope to showcase it using Prelude
+as an example.
 
 From Prelude to ATS
 ===================
 
-Our recent work where we replaced ATS' default constraint solver with one
-based on the Z3 SMT solver will be especially useful in this project. By doing
+Our recent work where we replaced ATS' default constraint solver with a more
+powerful one based on the Z3 SMT solver will be especially useful in this project. By doing
 so, we enriched the statics to be able to understand expressions involving 
 new sorts such as arrays, fixed width integers, and rational numbers. Most of
 the constraints given in the Prelude programming language involve integer arithmetic
@@ -75,4 +76,3 @@ between strictly periodic clocks. The period of these clocks is constricted to
 integers as this is required by the scheduling theory used and any generic real time 
 operating system. Rational numbers are still used, however, to express the phase
 of a periodic task, and this is where our new constraint solver comes in handy.
-
