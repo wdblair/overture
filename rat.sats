@@ -12,13 +12,20 @@ datasort rat =
 (**
   Provide static functions on rational numbers
 *)
-stacst mul_rat_rat : rat -> rat -> rat
+stacst mul_rat_rat : (rat, rat) -> rat
 stadef * = mul_rat_rat
 
-stacst add_rat_rat : rat -> rat -> rat
+stacst div_rat_rat : (rat, rat) -> rat
+stadef / = div_rat_rat
+
+stacst add_rat_rat : (rat, rat) -> rat
 stadef + = add_rat_rat
 
-stacst gte_rat_rat : rat -> rat -> bool
+stacst sub_rat_rat : (rat, rat) -> rat
+stadef - = sub_rat_rat
+
+stacst gte_rat_rat : (rat, rat) -> bool
+stadef >= = gte_rat_rat
 
 (**
   A built-in function provided by Z3
@@ -28,8 +35,7 @@ stacst gte_rat_rat : rat -> rat -> bool
 *)
 stacst is_int : rat -> bool
 
-stadef is_nat (n) = is_int (n) && n >= Rational(0)
-
+stadef is_nat (n:rat) = is_int(n) && (n >= Rational(0))
 
 (**
   Check whether a | b

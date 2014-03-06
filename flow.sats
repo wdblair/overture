@@ -1,27 +1,32 @@
 (**
-  A flow is the primary data type used in Prelude. Here, we define it as an abstract
-  type indexed by the flat type that appears in the flow, the period with which a value of
-  that type becomes available, and the flow's phase offset.
+  A flow is the primary data type  used in Prelude. Here, we define it
+  as an  abstract type indexed  by the flat  type that appears  in the
+  flow, the period with which a  value of that type becomes available,
+  and the flow's phase offset.
   
-  We limit all task periods as natural numbers as a discrete time model is required by the
-  scheduling theory and most real time operating systems. Task phases are allowed to be rational, 
-  under the constraint that the release time for the task is a natural number (i.e. it is a valid date). 
-  The addition of a rational type in the statics is made possible by using an SMT solver such as Z3 as 
+  We limit  all task  periods as  natural numbers  since a  discrete time
+  model  is required  by  the  scheduling theory  and  most real  time
+  operating systems. Task phases are allowed to be rational, under the
+  constraint that  the release time for  the task is a  natural number
+  (i.e. it is  a valid date). The  addition of a rational  type in the
+  statics is made  possible by using an  SMT solver such as  Z3 within 
   our constraint solver during type checking.
 *)
 
 staload "rat.sats"
 
+abst@ype rational (r: rat)
+
 (**
-  A simple flow data type
+  A simple flow type
   
-  Values of type a only occur at times t_0, t_1,... where for all i >= 0
-  t_{i+1} - t_i = n and t_0 = n*p.
+  Values of type a only occur at times t_0, t_1,... where for all 
+  i >= 0 t_{i+1} - t_i = n and t_0 = n*p.
 *)
 absvt@ype flow (a:t@ype, n: int, p: rat)
 
 (**
-  A _strictly_ periodic flow
+  A strictly periodic flow type
   
   Values of type a _always_ occur at times t_0, t_1, ... where for all i >=0
   t_{i+1} - t_i = n and t_0 = n*p.
@@ -38,8 +43,8 @@ absvt@ype strict_flow (a:t@ype, n: int, p: rat)
 *)
 fun
 flow_divide_clock {a:t@ype} {n,k:pos} {p:rat | is_nat(Rational(n)*p)} (
-  strict_flow (a, n, k), int k
-): strict_flow (a, n * k, p / k)
+  strict_flow (a, n, p), int k
+): strict_flow (a, n * k, p / Rational(k))
 
 (**
   Multiplying a periodic clock by k is equivalent to sampling
@@ -48,14 +53,14 @@ flow_divide_clock {a:t@ype} {n,k:pos} {p:rat | is_nat(Rational(n)*p)} (
 fun
 flow_multiply_clock {a:t@ype} {n,k:pos | divides(k, n)} {p:rat | is_nat(Rational(n)*p)} (
   strict_flow (a, n, p), int k
-): strict_flow (a, n / k, p * k)
+): strict_flow (a, n / k, p * Rational(k))
 
 (**
   A phase shift moves the release time of a task by some fraction of its period.
 *)
 fun
 flow_shift_phase {a:t@ype} {n:pos} {p,k:rat | is_nat((p + k)*Rational(n))} (
-  strict_flow (a, n, p), int k
+  strict_flow (a, n, p), rational k
 ): strict_flow (a, n, p + k)
 
 (**
@@ -64,7 +69,7 @@ flow_shift_phase {a:t@ype} {n:pos} {p,k:rat | is_nat((p + k)*Rational(n))} (
 fun
 flow_tail {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
   strict_flow (a, n, p)
-): strict_flow (a, n, p + 1)
+): strict_flow (a, n, p + Rational(1))
 
 
 (**
@@ -73,7 +78,7 @@ flow_tail {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
 fun
 flow_concat {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
   a, strict_flow (a, n, p)
-): strict_flow (a, n, p - 1)
+): strict_flow (a, n, p - Rational(1))
 
 (**
   Using when on two strictly periodic clocks yields a new clock that
@@ -87,9 +92,8 @@ flow_when {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
 
 
 (**
-  Combining two flows under complementary boolean clocks. The new
-  flow's value at date t_i is defined as on_i if c_i is true and off_i
-  otherwise.
+  Combining two flows  under complementary boolean clocks. The  new flow's value
+  at date t_i is defined as on_i if c_i is true and off_i otherwise.
 *)
 fun
 flow_merge {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
