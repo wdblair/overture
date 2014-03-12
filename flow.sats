@@ -99,3 +99,17 @@ fun
 flow_merge {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
   c: strict_flow (bool, n, p), on: strict_flow (a, n, p), off: strict_flow (a,n,p)
 ): strict_flow (a, n, p)
+
+(**
+  Transform a flow of single values into a flow of arrays.
+  
+  This could be useful if a system would rather not drop values
+  during undersampling.
+  
+  I haven't decided how tricky this might be to work into how Prelude
+  does compilation...
+*)
+fun
+flow_divide_clock_keep {a:t@ype} {n,k:pos}  {p:rat | is_nat(Rational(n)*p)} (
+  strict_flow (a, n, p), int k
+): strict_flow (@[a][k], n*k, p)
