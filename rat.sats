@@ -8,7 +8,7 @@
 datasort rat =
   | Rational of (int)
   | RationalDiv of (int, int)
-
+  
 (**
   Provide static functions on rational numbers
 *)
@@ -33,9 +33,9 @@ stadef >= = gte_rat_rat
   Example:
   (assert (is_int 0.0))
 *)
-stacst is_int : rat -> bool
+stacst is_int_int : rat -> bool
 
-stadef is_nat (n:rat) = is_int(n) && (n >= Rational(0))
+stadef is_nat (n:rat) = is_int_int(n) && (n >= Rational(0))
 
 (**
   Check whether a | b
