@@ -40,7 +40,7 @@ staload "flow.sats"
   I previously assumed that the absence of rate information 
   for a flow made it synchronous, but I see now that is not
   necessarily the case. Indeed, there really isn't a global
-  clock as we have in Esterel or Lustre.
+  clock as we have in Esterel, Lustre, Lucid Syncrhone.
   
   For each flow returned, go through the node and collect the
   operations performed on it
@@ -99,7 +99,7 @@ in
   o
 end
 
-fun 
+fun
 poly (
   i: strict_flow (int, 10, Rational(0)), j: strict_flow (int, 5, Rational(0))
 ): (

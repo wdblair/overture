@@ -23,7 +23,7 @@ abst@ype rational (r: rat)
   Values of type a only occur at times t_0, t_1,... where for all 
   i >= 0 t_{i+1} - t_i = n and t_0 = n*p.
 *)
-absvt@ype flow (a:t@ype, n: int, p: rat)
+abst@ype flow (a:t@ype, n: int, p: rat)
 
 (**
   A strictly periodic flow type
@@ -31,7 +31,7 @@ absvt@ype flow (a:t@ype, n: int, p: rat)
   Values of type a _always_ occur at times t_0, t_1, ... where for all i >=0
   t_{i+1} - t_i = n and t_0 = n*p.
 *)
-absvt@ype strict_flow (a:t@ype, n: int, p: rat)
+abst@ype strict_flow (a:t@ype, n: int, p: rat)
 
 
 (**
