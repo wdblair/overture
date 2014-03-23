@@ -14,10 +14,10 @@ staload "flow.sats"
   tel
 *)
 
-fun tail_twice (
-  i: strict_flow (int, 10, Rational(0))
+fun tail_twice {n:pos} (
+  i: strict_flow (int, n, Rational(0))
 ): (
-  strict_flow (int, 10, Rational(1)), strict_flow (int, 10, Rational(2))
+  strict_flow (int, n, Rational(1)), strict_flow (int, n, Rational(2))
 ) = let
   val j = flow_tail (i)
   val k = flow_tail (j)
