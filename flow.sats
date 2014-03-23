@@ -135,10 +135,10 @@ flow_merge {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
   This could be useful if a system would rather not drop values
   during undersampling.
   
-  I haven't decided how tricky this might be to work into how Prelude
-  does compilation.
+  Forget has an operator like this in his thesis, but I don't think the
+  compiler supports it yet.
 *)
 fun
-flow_divide_clock_keep {a:t@ype} {n,k:pos}  {p:rat | is_nat(Rational(n)*p)} (
+flow_divide_clock_queue {a:t@ype} {n,k:pos}  {p:rat | is_nat(Rational(n)*p)} (
   strict_flow (a, n, p), int k
 ): strict_flow (@[a][k], n*k, p)
