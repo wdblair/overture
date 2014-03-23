@@ -45,10 +45,10 @@ flow_make {a:t@ype} {n:nat} {p:rat} (): strict_flow (a, n, p)
   could be an interesting way to work linear types into the design
   of the system.
   
-  What's needed is an index that expresses which flow for which 
-  we are providing a future value. This requires refining the type 
-  of flows with  possibly a typekind to capture which node generated 
-  the flow.
+  What's needed is an index that expresses the flow for which 
+  we are providing a future value. This requires refining the flow type 
+  with  possibly a typekind to capture the node that generated 
+  any given flow.
 *)
 absview FlowFuture
 
@@ -136,7 +136,7 @@ flow_merge {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
   during undersampling.
   
   I haven't decided how tricky this might be to work into how Prelude
-  does compilation...
+  does compilation.
 *)
 fun
 flow_divide_clock_keep {a:t@ype} {n,k:pos}  {p:rat | is_nat(Rational(n)*p)} (
