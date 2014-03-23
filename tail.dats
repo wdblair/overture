@@ -44,12 +44,12 @@ putting it back together
 
 We can make these nodes a little bit more general if 
 we put a quantifier over the rate of the flows involved 
-since we only deal with concatenation. Maybe this support 
-could be added to the prelude language itself, where you 
-can describe the type signature of nodes in terms of quantified
-variables as opposed to constants...
+since we only deal with cons'ing values. Perhaps this support
+could be added to the Prelude language itself, where you can
+describe the type signature of nodes in terms of quantified 
+variables as opposed to constants. This could help distinguish
+Overture as a possible extension.
 *)
-
 fun init {n:pos} (
   i: strict_flow (int, n, Rational(0))
 ): (
