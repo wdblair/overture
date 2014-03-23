@@ -33,8 +33,37 @@ absvt@ype flow (a:t@ype, n: int, p: rat)
 *)
 absvt@ype strict_flow (a:t@ype, n: int, p: rat)
 
+
 (**
-  The strictly periodc flow transformation operators as specified by prelude
+  Create a flow
+*)
+fun
+flow_make {a:t@ype} {n:nat} {p:rat} (): strict_flow (a, n, p)
+
+(** 
+  The following axioms don't capture much, but I think they 
+  could be an interesting way to work linear types into the design
+  of the system.
+  
+  What's needed is an index that expresses which flow for which 
+  we are providing a future value. This requires refining the type 
+  of flows with  possibly a typekind to capture which node generated 
+  the flow.
+*)
+absview FlowFuture
+
+praxi
+flow_future_make {a:t@ype} {n:nat} {p:rat} (
+  &strict_flow (a, n, p)? >> strict_flow (a, n, p)
+): FlowFuture
+
+praxi
+flow_future_elim {a:t@ype} {n:nat} {p:rat} (
+  FlowFuture, &strict_flow (a, n, p)?, strict_flow (a, n, p)
+): void
+
+(**
+  The strictly periodic flow transformation operators specified by prelude
 *)
 
 (**
@@ -71,12 +100,12 @@ flow_tail {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
   strict_flow (a, n, p)
 ): strict_flow (a, n, p + Rational(1))
 
-
 (**
-  Concat a value to the head of the flow.
+  Concat a value to the head of the flow. I'm calling it cons since
+  it seems closer to cons for list then concatenation.
 *)
 fun
-flow_concat {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
+flow_cons {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
   a, strict_flow (a, n, p)
 ): strict_flow (a, n, p - Rational(1))
 

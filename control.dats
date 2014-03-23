@@ -1,6 +1,10 @@
 staload "rat.sats"
 staload "flow.sats"
 
+(** 
+  Take a look at page 7 of Jane Liu's Real-Time Systems
+  for a more complete example.
+*)
 extern
 fun roll (): strict_flow (int, 10, Rational(0))
 
