@@ -40,7 +40,7 @@ staload "flow.sats"
   I previously assumed that the absence of rate information 
   for a flow made it synchronous, but I see now that is not
   necessarily the case. Indeed, there really isn't a global
-  clock as we have in Esterel, Lustre, Lucid Syncrhone.
+  clock as we have in Lustre or Lucid Syncrhone.
   
   For each flow returned, go through the node and collect the
   operations performed on it
@@ -88,6 +88,11 @@ staload "flow.sats"
   fun 
   poly (i: strict_flow (10, 0), j: strict_flow (5, 0)):
     (strict_flow (20, 0), strict_flow (10, 0))
+
+  After reading through the section on clock inference, it looks
+  like this is more or less what Prelude does internally. There's
+  an advantage here though that we defer checking the correctness
+  of clocks to the type checker.
 *)
 
 fun
