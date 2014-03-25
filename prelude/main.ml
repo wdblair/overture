@@ -61,11 +61,16 @@ let compile basename =
       raise exc
   end;
   if !Options.print_clocks then
-    Corelang.pp_prog_clock prog
-  (** 
-    We're not really worried about compilation now, just the clocks.
-  *)
+    Corelang.pp_prog_clock prog;
+  ()
 
+let anonymous filename =
+  if Filename.check_suffix filename extension
+  then
+    let basename = Filename.chop_suffix filename extension in
+    compile basename
+  else
+    raise (Arg.Bad ("Can only compile *.plu files"))
 
 let _ =
   try

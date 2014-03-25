@@ -1,0 +1,14 @@
+imported node swap(i: int rate (500, 0); j: int rate (500, 0))
+  returns (o: int rate (500, 0);  p: int rate (500, 0)) wcet 100;
+imported node id(i: int rate (1500, 0)) 
+  returns (o: int rate (1500, 0)) wcet 150;
+
+sensor i wcet 50;
+actuator o wcet 50;
+
+node sampling(i: rate (500, 0)) returns (o: rate (500, 0))
+  var vf: rate (500, 0); vs: rate (1500, 0);
+let
+  (o, vf)=swap (i, (5 fby vs)*^3);
+  vs=id(vf/^3);
+tel

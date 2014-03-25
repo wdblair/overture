@@ -23,7 +23,7 @@ fun tail_twice {n:pos} (
   val k = flow_tail (j)
 in
   (j, k)
-end
+end    
 
 (**
 

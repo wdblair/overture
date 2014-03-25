@@ -42,13 +42,16 @@ fun
 sample (i: strict_flow (int, 10, Rational(0))):
   [n:nat] [p:rat] strict_flow (int, n, p) = let
   var vs : strict_flow (int, 30, Rational(0))
+  var vf : strict_flow (int, 10, Rational(0))
   //
-  prval pfs = flow_future_make (vs)
+  prval pfvs = flow_future_make (vs)
+  prval pfvf = flow_future_make (vf)
   //
-  val (o, vf) = F (i, flow_multiply_clock (vs, 3))
+  val (o, vf') = F (i, flow_multiply_clock (vs, 3))
   
   val vs' = S (flow_divide_clock (vf, 3))
-  prval () = flow_future_elim (pfs, vs, vs')
+  prval () = flow_future_elim (pfvs, vs, vs')
+  prval () = flow_future_elim (pfvf, vf, vf')
 in
   o
 end

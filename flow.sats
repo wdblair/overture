@@ -17,6 +17,8 @@ staload "rat.sats"
 
 abst@ype rational (r: rat)
 
+fun rational_make {p,q:int} (int p, int q): rational (RationalDiv(p,q))
+
 (**
   A simple flow type
   
@@ -116,7 +118,12 @@ flow_cons {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
 *)
 fun
 flow_when {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
-  activate: strict_flow (bool, n, p), x: strict_flow (a, n, p)
+   x: strict_flow (a, n, p),  activate: strict_flow (bool, n, p)
+): flow (a, n, p)
+
+fun
+flow_whennot {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
+   x: strict_flow (a, n, p),  activate: strict_flow (bool, n, p)
 ): flow (a, n, p)
 
 

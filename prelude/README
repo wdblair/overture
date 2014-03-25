@@ -3,3 +3,10 @@ Prelude Files
 
 These are files I plan to change in the Prelude
 compiler so that it will output ATS code.
+
+Instructions
+============
+
+1. Download prelude-1.3
+2. Copy all the ml files into the prelude src/ directory
+3. Compile prelude as normal

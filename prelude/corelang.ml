@@ -69,7 +69,7 @@ type var_decl =
      mutable var_type: Types.type_expr;
      mutable var_clock: Clocks.clock_expr;
      var_loc: Location.t}
-
+      
 (* The tag of an expression is a unique identifier used to distinguish
    different instances of the same node *)
 type expr =
@@ -140,6 +140,7 @@ type error =
     Main_not_found
   | Main_wrong_kind
   | No_main_specified
+  | Too_general_type
 
 exception Error of error
 exception Unbound_type of ident*Location.t
@@ -175,42 +176,243 @@ let pp_decl_type tdecl =
       Types.print_ty nd.node_type;
       print_newline ()
   | ImportedNode ind ->
-      print_string ind.nodei_id;
-      print_string ": ";
-      Utils.reset_names ();
-      Types.print_ty ind.nodei_type;
-      print_newline ()
- | SensorDecl _ | ActuatorDecl _ -> ()
-
-let pp_decl_ats tdecl = 
-  match tdecl.top_decl_desc with
-  | Node nd ->
-     print_string nd.node_id;
-     print_string ": ";
-     Utils.reset_names ();
-     Types.print_ty nd.node_type;
-     print_newline ();
-     (** Print all the inputs *)
-     Utils.pp_list nd.node_inputs (fun x -> print_string x.var_id) "("  ")" ", ";
-     print_string ": ";
-     Utils.pp_list nd.node_outputs (fun x -> print_string x.var_id) "(" ")" ", ";
-     print_newline ();
- | ImportedNode ind ->
      print_string ind.nodei_id;
      print_string ": ";
      Utils.reset_names ();
      Types.print_ty ind.nodei_type;
+     print_newline ()
+  | SensorDecl _ | ActuatorDecl _ -> ()
+                                       
+let pp_strict_flow_ats ty clock_dec =
+  print_string "strict_flow (";
+  Types.print_ty ty;
+  print_string ", ";
+  match clock_dec with
+  | Ckdec_pclock (n, p) ->
+     print_int n;
+     print_string ", ";
+     let (q, r) = p in
+     print_string "RationalDiv(";
+     print_int q;
+     print_string ", ";
+     print_int r;
+     print_string "))";
+  | _ -> raise (Error Too_general_type)
+               
+let pp_vars_decls_ats var_decls with_id =
+  Utils.pp_list var_decls 
+                (fun v ->
+                 if with_id then
+                   begin
+                     print_string v.var_id;
+                     print_string ": "
+                   end;
+                 let ty = v.var_type in
+                 let ck_dec = v.var_dec_clock in
+                 pp_strict_flow_ats ty ck_dec.ck_dec_desc
+                ) "(" ")" ", "
+
+let pp_const_ats cst =
+  match cst with
+  | Const_int num -> 
+     print_int num
+  | _ -> 
+     raise (Error Too_general_type)
+               
+let rec pp_expr_ats expr =
+  let expr_desc = expr.expr_desc in
+  match expr_desc with
+  | Expr_const cst ->
+     pp_const_ats cst
+  | Expr_ident id -> 
+     print_string id
+  | Expr_tuple exprs ->
+     Utils.pp_list exprs (fun exp -> pp_expr_ats exp) "(" ")" ", "
+  | Expr_fby (cst, expr)  ->
+     print_string "(flow_cons (";
+     pp_const_ats cst;
+     print_string ", ";
+     pp_expr_ats expr;
+     print_string "))"
+  | Expr_concat (cst, expr) ->
+     print_string "(flow_cons (";
+     pp_const_ats cst;
+     print_string ", ";
+     pp_expr_ats expr;
+     print_string "))"
+  | Expr_tail expr ->
+     print_string "(flow_tail (";
+     pp_expr_ats expr;
+     print_string "))"
+  | Expr_when (expr, id) ->
+     print_string "(flow_when (";
+     pp_expr_ats expr;
+     print_string ", ";
+     print_string id;
+     print_string "))"
+  | Expr_whennot (expr, id) ->
+     print_string "(flow_whennot (";
+     pp_expr_ats expr;
+     print_string ", ";
+     print_string id;
+     print_string "))"
+  | Expr_merge (id, on, off) ->
+     print_string "(flow_merge (";
+     print_string id;
+     print_string ", ";
+     pp_expr_ats on;
+     print_string ", ";
+     pp_expr_ats off;
+     print_string "))";
+  | Expr_appl (id, expr) ->
+     print_string id;
+     print_string " ";
+     pp_expr_ats expr;
+  | Expr_uclock (expr, k) ->
+     print_string "(flow_multiply_clock (";
+     pp_expr_ats expr;
+     print_string ", ";
+     print_int k;
+     print_string "))"
+  | Expr_dclock (expr, k) ->
+     print_string "(flow_divide_clock (";
+     pp_expr_ats expr;
+     print_string ", ";
+     print_int k;
+     print_string "))"
+  | Expr_phclock (expr, r) ->
+     let (p, q) = r in
+     print_string "(flow_shift_phase (";
+     pp_expr_ats expr;
+     print_string ", ";
+     print_string "rational_make (";
+     print_int p;
+     print_string ", ";
+     print_int q;
+     print_string ")))"
+
+let pp_node_eqs_ats nd =
+  (** Get the names of all local variables. *)
+  let locals = List.map (fun v -> v.var_id) nd.node_locals in
+  Utils.pp_list nd.node_eqs
+                (fun eq ->
+                 Utils.pp_list eq.eq_lhs
+                               (fun id ->
+                                if List.exists 
+                                     (fun vid -> id = vid) locals then
+                                  begin
+                                    print_string id;
+                                    print_string "'";
+                                  end
+                                else
+                                  print_string id) "val (" ") = " ", ";
+                 pp_expr_ats eq.eq_rhs;
+                 print_newline ()) "" "" ""
+
+(**
+Declare any local flows
+ *)
+let pp_local_vars_decls_ats var_decls = 
+  Utils.pp_list var_decls
+                (fun v ->
+                 print_string "var ";
+                 print_string v.var_id;
+                 print_string " : ";
+                 let ty = v.var_type in
+                 let ck_dec = v.var_dec_clock in
+                 pp_strict_flow_ats ty ck_dec.ck_dec_desc;
+                 print_newline ();
+                 print_string "prval pf";
+                 print_string v.var_id;
+                 print_string " = flow_future_make (";
+                 print_string v.var_id;
+                 print_string ")";
+                 print_newline ()) "" "" ""
+
+(**
+"Sync up" the local flows
+ *)
+let pp_sync_local_vars_ats var_decls = 
+  Utils.pp_list var_decls
+                (fun v ->
+                 print_string 
+                   "prval () = flow_future_elim (pf";
+                 print_string v.var_id;
+                 print_string ", ";
+                 print_string v.var_id;
+                 print_string ", ";
+                 print_string v.var_id;
+                 print_string "')";
+                 print_newline ()) "" "" ""
+
+(**
+Return the functions flows
+ *)
+let pp_output_vars nd =
+  Utils.pp_list nd.node_outputs 
+                (fun v -> print_string v.var_id) "(" ")" ", "
+
+(** print the type signature of a function *)
+let pp_node_sig_ats nd =
+  print_string "fun ";
+  print_string nd.node_id;
+  pp_vars_decls_ats nd.node_inputs true;
+  print_string ": ";
+  pp_vars_decls_ats nd.node_outputs false
+
+(** Print the body of a node *)
+let pp_node_body nd =
+  print_string " = let";
+  print_newline ();
+  pp_local_vars_decls_ats nd.node_locals;
+  pp_node_eqs_ats nd;
+  print_newline ();
+  pp_sync_local_vars_ats nd.node_locals;
+  print_newline ();
+  print_string "in";
+  print_newline ();
+  pp_output_vars nd;
+  print_newline ();
+  print_string "end";
+  print_newline ()
+
+(** print the declaration and body of a node *)
+let pp_node_ats nd =
+  pp_node_sig_ats nd;
+  pp_node_body nd
+
+let pp_nodei_sig_ats nd =
+  print_string "extern fun ";
+  print_string nd.nodei_id;
+  pp_vars_decls_ats nd.nodei_inputs true;
+  print_string ": ";
+  pp_vars_decls_ats nd.nodei_outputs false
+
+let pp_nodei_ats nd = 
+  pp_nodei_sig_ats nd
+
+
+let pp_decl_ats tdecl =
+  match tdecl.top_decl_desc with
+  | Node nd ->
+     pp_node_ats nd;
      print_newline ();
-     Utils.pp_list ind.nodei_inputs (fun x -> print_string x.var_id) "("  ")" ", ";
-     print_string ": ";
-     Utils.pp_list ind.nodei_outputs (fun x -> print_string x.var_id) "(" ")" ", ";
-     print_newline ();	
+     print_newline ()
+  | ImportedNode ind ->
+     pp_nodei_ats ind;
+     print_newline ();
+     print_newline ()
   | SensorDecl _ | ActuatorDecl _ -> ()
 
 let pp_prog_type tdecl_list =
   Utils.pp_list tdecl_list pp_decl_type "" "" ""
 
 let pp_prog_ats tdecl_list =
+  print_string "staload \"rat.sats\"";
+  print_newline ();
+  print_string "staload \"flow.sats\"";
+  print_newline ();
+  print_newline ();
   Utils.pp_list tdecl_list pp_decl_ats "" "" ""
 
 let pp_decl_clock cdecl =
@@ -246,3 +448,6 @@ let pp_error = function
   | No_main_specified ->
       print_string "No main node specified";
       print_newline ()
+  | Too_general_type ->
+     print_string "Too general type encountered";
+     print_newline ()
