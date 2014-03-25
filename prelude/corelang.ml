@@ -229,7 +229,7 @@ let rec pp_expr_ats expr =
   | Expr_tuple exprs ->
      Utils.pp_list exprs (fun exp -> pp_expr_ats exp) "(" ")" ", "
   | Expr_fby (cst, expr)  ->
-     print_string "(flow_cons (";
+     print_string "(flow_fby (";
      pp_const_ats cst;
      print_string ", ";
      pp_expr_ats expr;

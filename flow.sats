@@ -112,6 +112,14 @@ flow_cons {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
 ): strict_flow (a, n, p - Rational(1))
 
 (**
+  Introduce a delay of a flow
+*)
+fun
+flow_fby {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
+  a, strict_flow (a, n, p)
+): strict_flow (a, n, p)
+
+(**
   Using when on two strictly periodic clocks yields a new clock that
   is x_i if at time t_i activate_i evaluates to true and undefined
   otherwise.
