@@ -1,0 +1,13 @@
+imported node swap (i,j: int) returns (o, p: int) wcet 100;
+imported node id (i: int) returns (o: int) wcet 150;
+
+sensor i wcet 50;
+actuator o wcet 50;
+
+
+node sampling (i: rate (500, 0)) returns (o)
+  var vf, vs;
+let
+  (o, vf) = swap (i, (5 fby vs)*^3);
+  vs= id(vf/^3);
+tel

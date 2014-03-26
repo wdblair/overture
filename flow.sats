@@ -19,6 +19,9 @@ abst@ype rational (r: rat)
 
 fun rational_make {p,q:int} (int p, int q): rational (RationalDiv(p,q))
 
+praxi rational_pf {p,q:int} (int p, int q): rational (RationalDiv(p,q))
+
+
 (**
   A simple flow type
   
@@ -35,6 +38,7 @@ abst@ype flow (a:t@ype, n: int, p: rat)
 *)
 abst@ype strict_flow (a:t@ype, n: int, p: rat)
 
+typedef StrictFlow (a:t@ype) = [n:pos] [p:rat] strict_flow (a, n, p)
 
 (**
   Create a flow
@@ -54,6 +58,11 @@ flow_make {a:t@ype} {n:nat} {p:rat} (): strict_flow (a, n, p)
 *)
 absview FlowFuture
 
+extern
+praxi set_clock {a:t@ype} {m:pos} {q:rat}   (
+  &StrictFlow (int)? >> strict_flow (a, m, q), int m, rational (q)
+): FlowFuture
+
 praxi
 flow_future_make {a:t@ype} {n:nat} {p:rat} (
   &strict_flow (a, n, p)? >> strict_flow (a, n, p)
@@ -63,6 +72,7 @@ praxi
 flow_future_elim {a:t@ype} {n:nat} {p:rat} (
   FlowFuture, &strict_flow (a, n, p)?, strict_flow (a, n, p)
 ): void
+
 
 (**
   The strictly periodic flow transformation operators specified by prelude

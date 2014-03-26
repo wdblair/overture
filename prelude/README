@@ -10,3 +10,18 @@ Instructions
 1. Download prelude-1.3
 2. Copy all the ml files into the prelude src/ directory
 3. Compile prelude as normal
+
+
+Tests
+=====
+
+- sampling-easy.plu
+
+A simple example of two periodic tasks communicating. This is marked
+"easy" since it requires no clock inference and all rates are given
+explicitely.
+
+- sampling-hard.plu 
+
+The same sampling example but with only one rate given, the rest must
+be determined automatically.
