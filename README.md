@@ -68,11 +68,22 @@ From Prelude to ATS
 ===================
 
 Our recent work where we replaced ATS' default constraint solver with a more
-powerful one based on the Z3 SMT solver will be especially useful in this project. By doing
-so, we enriched the statics to be able to understand expressions involving 
-new sorts such as arrays, fixed width integers, and rational numbers. Most of
-the constraints given in the Prelude programming language involve integer arithmetic
-between strictly periodic clocks. The period of these clocks is constricted to
-integers as this is required by the scheduling theory used and any generic real time 
-operating system. Rational numbers are still used, however, to express the phase
-of a periodic task, and this is where our new constraint solver comes in handy.
+powerful one based on the Z3 SMT solver will be especially useful in this project. 
+By doing so, we enriched the statics to be able to understand expressions 
+involving new sorts such as arrays, fixed width integers, and rational numbers. 
+Most of the constraints given in the Prelude programming language involve integer 
+arithmetic between strictly periodic clocks. The period of these clocks is 
+constricted to integers as this is required by the scheduling theory used and any 
+generic real time operating system. Rational numbers are still used, however, to 
+express the phase offset of a periodic task, and this is where our new constraint 
+solver comes in handy.
+
+We currently have some very experimental support for automatically converting Prelude
+code to ATS. For instructions on getting Prelude with our changes, see the ./prelude/README
+file. Once you have our modified version of Prelude, you can check the Prelude
+program for correct clocks using the following command.
+
+    preludec node main -print_ats ./example.plu | patsopt --constraint-export -tc -d | patsolve
+
+You'll also need the alternative constraint solver available at doc/PROJECT/MEDIUM/ATS-constraint
+in the postiats repo.
