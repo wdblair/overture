@@ -33,8 +33,8 @@ sampling (
   var vf : StrictFlow (int)
   var vs : StrictFlow (int)
   //
-  prval pfvf = set_clock (vf, 500, rational_pf(0, 1))
-  prval pfvs = set_clock (vs, 1500, rational_pf(0,1))
+  prval pfvf = set_clock (vf, 500, rational_pf (0, 1))
+  prval pfvs = set_clock (vs, 1500, rational_pf (0,1))
   //
   val (o, vf') = swap (i, flow_multiply_clock (flow_fby (5, vs), 3))
   val (vs') = id (flow_divide_clock (vf, 3))

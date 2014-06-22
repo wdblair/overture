@@ -58,7 +58,6 @@ flow_make {a:t@ype} {n:nat} {p:rat} (): strict_flow (a, n, p)
 *)
 absview FlowFuture
 
-extern
 praxi set_clock {a:t@ype} {m:pos} {q:rat}   (
   &StrictFlow (int)? >> strict_flow (a, m, q), int m, rational (q)
 ): FlowFuture
