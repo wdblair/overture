@@ -59,7 +59,7 @@ flow_make {a:t@ype} {n:nat} {p:rat} (): strict_flow (a, n, p)
 absview FlowFuture
 
 praxi set_clock {a:t@ype} {m:pos} {q:rat}   (
-  &StrictFlow (int)? >> strict_flow (a, m, q), int m, rational (q)
+  &StrictFlow (a)? >> strict_flow (a, m, q), int m, rational (q)
 ): FlowFuture
 
 praxi
@@ -163,6 +163,7 @@ flow_merge {a:t@ype} {n:pos} {p:rat | is_nat(Rational(n)*p)} (
   compiler supports it yet.
 *)
 fun
-flow_divide_clock_queue {a:t@ype} {n,k:pos}  {p:rat | is_nat(Rational(n)*p)} (
+flow_divide_clock_queue {a:t@ype} {n,k:pos | divides(k,n)}
+  {p:rat | is_nat(Rational(n)*p)} (
   strict_flow (a, n, p), int k
 ): strict_flow (@[a][k], n*k, p)

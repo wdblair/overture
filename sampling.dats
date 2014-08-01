@@ -32,11 +32,11 @@ staload "flow.sats"
 *)
 
 extern fun
-F (strict_flow (int, 10, Rational(0)), strict_flow (int, 10, Rational(0))):
-  (strict_flow (int, 10, Rational(0)), strict_flow (int, 10, Rational(0)))
+F {n:pos}{p:rat}(strict_flow (int, n, p), strict_flow (int, n, p)):
+  (strict_flow (int, n, p), strict_flow (int, n, p))
   
 extern fun
-S (strict_flow (int, 30, Rational(0))): strict_flow (int, 30, Rational(0))
+S {n:pos}{p:rat}(strict_flow (int, n, p)): strict_flow (int, n, p)
 
 fun
 sample (i: strict_flow (int, 10, Rational(0))):
