@@ -11,6 +11,7 @@ addons:
     - libev-dev
     - libjansson-dev
     - ocaml
+    - ocaml-findlib
   
 before_install:
   - date
