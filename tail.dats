@@ -5,7 +5,7 @@ staload "flow.sats"
 
 (**
   Here's a simple test of the tail operator. 
-
+  
   node tail_twice(i: int rate(10,0))
   returns (o1: int rate(10,1); o2: int rate(10,2))
   let

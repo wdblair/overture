@@ -53,12 +53,11 @@ flow_make {a:t@ype} {n:nat} {p:rat} (): strict_flow (a, n, p)
   
   What's needed is an index that expresses the flow for which 
   we are providing a future value. This requires refining the flow type 
-  with  possibly a typekind to capture the node that generated 
-  any given flow.
+  with possibly an id to capture the node that generated any given flow.
 *)
 absview FlowFuture
 
-praxi set_clock {a:t@ype} {m:pos} {q:rat}   (
+praxi set_clock {a:t@ype} {m:pos} {q:rat} (
   &StrictFlow (a)? >> strict_flow (a, m, q), int m, rational (q)
 ): FlowFuture
 

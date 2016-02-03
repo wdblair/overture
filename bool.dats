@@ -22,7 +22,8 @@ let
 tel
 
 *)
-fun condperiodic {a:t@ype} {n:pos | divides(2, n)} (
+fun 
+condperiodic {a:t@ype} {n:pos | divides(2, n)} (
   c: strict_flow (bool, n/2, Rational(0)), i: strict_flow (a, n, Rational(0))
 ): flow (a, n/2, Rational (0)) = let
   val i2 = flow_multiply_clock (i, 2)

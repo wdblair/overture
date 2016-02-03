@@ -83,7 +83,7 @@ code to ATS. For instructions on getting Prelude with our changes, see the ./pre
 file. Once you have our modified version of Prelude, you can check the Prelude
 program for correct clocks using the following command.
 
-    preludec node main -print_ats ./example.plu | patsopt --constraint-export -tc -d | patsolve
-
+    preludec -node main -print_ats ./example.plu | patsopt --constraint-export -tc -d /dev/stdin | patsolve
+ 
 You'll also need the alternative constraint solver available at doc/PROJECT/MEDIUM/ATS-constraint
 in the postiats repo.
