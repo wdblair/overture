@@ -44,6 +44,8 @@ script:
   - (cd ${PATSHOME} && ./configure && make all)
   - export PATH=${HOME}/bin:${PATH}
   - (cd my-ats2-contrib/projects/MEDIUM/ATS-extsolve && make)
-
+  - cd ${TRAVIS_BUILD_DIR}
+  - make
+  
 after_script:
   - date
