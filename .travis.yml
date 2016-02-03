@@ -10,10 +10,8 @@ addons:
     - libgtk-3-dev
     - libev-dev
     - libjansson-dev
-    - libz3-dev
-    - z3
-    - python-z3
     - ocaml
+  
 before_install:
   - date
   - cat /proc/cpuinfo
