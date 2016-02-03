@@ -19,7 +19,9 @@ before_install:
   - ${TRAVIS_BUILD_DIR}/travis-ci/installpkg.sh
   - cd ${HOME}
   - mkdir pkg
-  - export CFLAGS="-Wno-unused-but-set-variable"
+  - mkdir pkg/include
+  - mkdir pkg/lib
+  - export CFLAGS="-Wno-unused-but-set-variable -I ${HOME}/pkg/include/"
   - (cd json-c-0.12 && ./configure --prefix=${HOME}/pkg && make all && make install)
   - cd ${HOME}
   # Download ATS2
