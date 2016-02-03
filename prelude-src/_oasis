@@ -1,0 +1,18 @@
+OASISFormat: 0.2
+Name:        Prelude
+Version:     1.3
+Synopsis:    Prelude compiler
+Authors:     Julien Forget, Pierre-Loïc Garoche, Eric Noulard, Wolfgang Puffitsch
+License:     LGPL-2.1
+Plugins:     DevFiles (0.2), StdFiles (0.2)
+
+XStdFilesREADME:    false
+XStdFilesINSTALL:   false
+XStdFilesAUTHORS:   true
+
+Executable preludec
+  Path:       src
+  BuildTools: ocamlbuild
+  MainIs:     main.ml
+  CompiledObject: native
+  

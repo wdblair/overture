@@ -1,0 +1,29 @@
+imported node Gyro_Acq(gyro, tc: int) returns (o: int) wcet 3;
+imported node GPS_Acq(gps, tc: int) returns (o: int) wcet 3;
+imported node Str_Acq(str, tc: int) returns (o: int) wcet 3;
+imported node FDIR(gyr, gps, str, gnc: int) returns (to_pde, to_gnc, to_tm: int) wcet 15;
+imported node GNC_US(fdir, gyr, gps, str: int) returns (o: int) wcet 210;
+imported node GNC_DS(us: int) returns (pde, sgs, pws: int) wcet 300;
+imported node TM_TC(from_gr, fdir: int) returns (cmd: int) wcet 1000;
+imported node PDE(fdir, gnc: int) returns (pde_order: int) wcet 3;
+imported node SGS(gnc: int) returns (sgs_order: int) wcet 3;
+imported node PWS(gnc: int) returns (pws_order: int) wcet 3;
+sensor gyro wcet 1; sensor gps wcet 1; sensor str wcet 1; sensor tc wcet 1;
+actuator pde wcet 1; actuator sgs wcet 1; actuator gnc wcet 1;
+actuator pws wcet 1; actuator tm wcet 1;
+
+node FAS(gyro: rate (100, 0); gps: rate (1000, 0); str:  rate (10000, 0); tc: rate (10000, 0))
+returns (pde, sgs;gnc: due 300; pws, tm)
+var gyro_acq, gps_acq, str_acq, fdir_pde, fdir_gnc, fdir_tm, gnc_pde, gnc_sgs, gnc_pws;
+let
+  gyro_acq = Gyro_Acq(gyro, (0 fby tm)*^100);
+  gps_acq = GPS_Acq(gps, (0 fby tm)*^10);
+  str_acq = Str_Acq(str, 0 fby tm);
+  (fdir_pde, fdir_gnc, fdir_tm) = FDIR(gyro_acq, gps_acq*^10, str_acq*^100, (0 fby gnc)*^10);
+  gnc=GNC_US(fdir_gnc/^10, gyro_acq/^10, gps_acq, str_acq*^10);
+  (gnc_pde, gnc_sgs, gnc_pws)=GNC_DS(gnc);
+  pde = PDE(fdir_pde, (0 fby gnc_pde)*^10);
+  sgs = SGS(gnc_sgs);
+  pws=PWS(gnc_pws~>1/2);
+  tm = TM_TC(tc, fdir_tm/^100);
+tel

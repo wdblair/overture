@@ -1,0 +1,52 @@
+                                Prelude
+                                -------
+
+Version VERSION - DATE
+
+Requirements
+============
+
+## This version was compiled for a PLATFORM architecture.
+
+If you install from a source distribution, the OCaml compiler is
+required. The binary distribution should be standalone.
+
+No particular programs are required for executing the compiler.
+
+Compiling and executing the generated code however requires:
+o A Real-time operating system which supports dynamic priority schedulers
+o For a monocore architecture, an implementation of the slightly
+modified EDF policy supporting deadline words defined in [forgetPHD].
+o For a multicore architecture, a scheduling policy that supports
+precedence constraints.
+
+If you are familiar with your operating system, modifying the EDF policy
+to support deadline words (for monoprocessor) should be fairly easy.
+
+Otherwise, full support is provided by the Schedmcore framework
+http://sites.onera.fr/schedmcore/.
+
+Installation
+============
+
+---- From a binary distribution
+Simply extract the archive where you want.
+
+---- From a source distribution
+PREREQUISITES: OCaml, Ocamlfind, Makefile
+
+Run the install.sh script located at the root of the distribution. You
+can specify an installation prefix using the -d option.
+
+---- In both cases:
+You can then directly execute the compiler using the "preludec" command
+located in the "bin" directory of your installation.
+
+References
+==========
+[forgetPHD] http://www.labri.fr/~forget/docs/jforget-thesis.pdf
+
+--------------------------------------------------------------------------
+  Contact Address:                          Home site:
+  julien.forget@lifl.fr           http://www.lifl.fr/~forget/
+--------------------------------------------------------------------------

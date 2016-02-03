@@ -1,0 +1,25 @@
+Requirements
+------------
+- Prelude (obviously)
+- Schedmcore (see http://sites.onera.fr/schedmcore/)
+- "cmake", a package should be available for most Linux architectures
+
+To execute in monocore mode, you can for instance use the following sequence of commands:
+1) mkdir build
+2) cd build
+3) cmake -DPRELUDE_PATH_HINT=/INSTALL_DIT/prelude-x.x/ ..
+4) make
+5) lsmc_run -l ./libsampling.so -s libsched_pluedf.so -c 1 -b 1000
+
+To execute in multicore mode:
+1) Edit CMakeLists.txt and change the Prelude_Compile command to replace
+it by the commented version
+2) mkdir build
+3) cd build
+4) cmake -DPRELUDE_PATH_HINT=/INSTALL_DIT/prelude-x.x/ ..
+5) make
+6) lsmc_run -l ./libsampling.so -s libsched_edf.so -c 4 -b 1000
+This example will run the program on 4 cores with the classic EDF policy.
+
+To adapt this Makefile to your own program, simply change the NODE and
+PLU_FILES variables in file CMakeLists.txt

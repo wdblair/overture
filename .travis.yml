@@ -1,0 +1,40 @@
+os:
+  - linux
+sudo: false
+addons:
+  apt:
+    packages:
+    - python
+    - libgc-dev
+    - libgmp-dev
+    - libgtk-3-dev
+    - libev-dev
+    - libjansson-dev
+    - libz3-dev
+    - z3
+    - python-z3
+    - ocaml
+before_install:
+  - date
+  - cat /proc/cpuinfo
+  # Install pkgs
+  - ${TRAVIS_BUILD_DIR}/travis-ci/installpkg.sh
+  - cd ${HOME}
+  - mkdir pkg
+  - export CFLAGS="-Wno-unused-but-set-variable"
+  - (cd json-c-0.12 && ./configure --prefix=${HOME}/pkg && make all && make install)
+  - cd ${HOME}
+  # Download ATS2
+  - git clone git://git.code.sf.net/p/ats2-lang/code ATS2-srcfrg
+  # Seting-up ATS2-contrib
+  - export PATSHOMERELOC=${TRAVIS_BUILD_DIR}
+  - export PKG_CONFIG_PATH=${HOME}/pkg/lib/pkgconfig/
+  - export LD_LIBRARY_PATH=${HOME}/pkg/lib/
+script:
+  # Building ATS2
+  - export PATSHOME=${HOME}/ATS2-srcfrg
+  - export PATH=${PATH}:${PATSHOME}/bin
+  - (cd ${PATSHOME} && ./configure && make all)
+  - export PATH=${HOME}/bin:${PATH}
+after_script:
+  - date

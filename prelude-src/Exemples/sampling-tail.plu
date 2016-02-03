@@ -1,0 +1,12 @@
+type entiers = int;
+imported node F(i, j: entiers ) returns (o, p: entiers) wcet 5;
+imported node S(i: entiers) returns (o: entiers) wcet 5;
+sensor i wcet 1;
+actuator o wcet 1;
+
+node sampling_tail(i: rate (10, 0)) returns (o)
+  var vf, vs;
+let
+  o, vf =F(i, (0::((0 fby vs)*^3)));
+  vs=S((tail(vf))/^3);
+tel
