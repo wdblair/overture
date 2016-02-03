@@ -1,0 +1,15 @@
+imported node controller(i: int rate (100, 0); j: int rate (100, 0))
+  returns (o: int rate (100, 0);  p: int rate (100, 0)) wcet 50;
+
+imported node database (i: int rate (10, 0))
+  returns (o: int rate (10, 0)) wcet 5;
+  
+sensor i wcet 5;
+actuator o wcet 5;
+
+node main (i: rate (10, 0)) returns (o: rate (100, 0))
+  var command: rate (100, 0); response: rate (10, 0);
+let
+  (o, command) = controller(i/^10, (0 fby response)/^10);
+  response=database(command*^10);
+tel
