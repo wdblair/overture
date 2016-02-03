@@ -11,6 +11,7 @@ addons:
     - libev-dev
     - libjansson-dev
     - ocaml
+    - z3
   
 before_install:
   - date
@@ -36,7 +37,7 @@ script:
   - export PATH=${HOME}/bin:${PATH}
   # Download my ATS2 Contrib
   - git clone https://github.com/wdblair/ATS-Postiats-Contrib my-ats2-contrib
-  - (cd my-ats2-contrib/projects/MEDIUM/ATS-extsolve) && make
+  - (cd my-ats2-contrib/projects/MEDIUM/ATS-extsolve && make)
   
 after_script:
   - date
