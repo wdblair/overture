@@ -1,6 +1,6 @@
 os:
   - linux
-sudo: required
+sudo: no
 addons:
   apt:
     packages:
