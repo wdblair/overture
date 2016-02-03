@@ -36,5 +36,9 @@ script:
   - export PATH=${PATH}:${PATSHOME}/bin
   - (cd ${PATSHOME} && ./configure && make all)
   - export PATH=${HOME}/bin:${PATH}
+  # Download my ATS2 Contrib
+  - git clone https://github.com/wdblair/ATS-Postiats-Contrib my-ats2-contrib
+  - (cd my-ats2-contrib/projects/MEDIUM/ATS-extsolve) && make
+  
 after_script:
   - date
