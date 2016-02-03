@@ -8,7 +8,7 @@ control.dats: control.plu
 .phony: preludec
 
 demo: preludec control.dats
-	patsopt --constraint-export -tc -d control.dats | patsolve
+	patsopt --constraint-export -tc -d control.dats | patsolve -v
 
 preludec:
 	cd prelude-src && ./configure && make
