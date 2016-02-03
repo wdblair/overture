@@ -26,7 +26,7 @@ before_install:
   - git clone git://git.code.sf.net/p/ats2-lang/code ATS2-srcfrg
   # Download my ATS2 Contrib
   - git clone https://github.com/wdblair/ATS-Postiats-Contrib my-ats2-contrib
-  - export PATSHOMERELOC=${TRAVIS_BUILD_DIR}/my-ats2-contrib
+  - export PATSHOMERELOC=${HOME}/my-ats2-contrib
   - export PKG_CONFIG_PATH=${HOME}/pkg/lib/pkgconfig/
   - export LD_LIBRARY_PATH=${HOME}/pkg/lib/
   - export C_INCLUDE_PATH=${HOME}/pkg/include/
@@ -41,7 +41,6 @@ script:
   - (cd ${PATSHOME} && ./configure && make all)
   - export PATH=${HOME}/bin:${PATH}
   - (cd my-ats2-contrib/projects/MEDIUM/ATS-extsolve && make)
-
 
 after_script:
   - date
