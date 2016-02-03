@@ -22,6 +22,7 @@ before_install:
   - mkdir pkg/include
   - mkdir pkg/lib
   - export CFLAGS="-Wno-unused-but-set-variable -I ${HOME}/pkg/include/"
+  - export LDFLAGS="-L ${HOME}/pkg/lib"
   - (cd json-c-0.12 && ./configure --prefix=${HOME}/pkg && make all && make install)
   - cd ${HOME}
   # Download ATS2
