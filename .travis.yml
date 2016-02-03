@@ -1,6 +1,6 @@
 os:
   - linux
-sudo: false
+sudo: required
 addons:
   apt:
     packages:
@@ -11,7 +11,6 @@ addons:
     - libev-dev
     - libjansson-dev
     - ocaml
-    - z3
   
 before_install:
   - date
@@ -25,19 +24,24 @@ before_install:
   - cd ${HOME}
   # Download ATS2
   - git clone git://git.code.sf.net/p/ats2-lang/code ATS2-srcfrg
-  # Seting-up ATS2-contrib
-  - export PATSHOMERELOC=${TRAVIS_BUILD_DIR}
+  # Download my ATS2 Contrib
+  - git clone https://github.com/wdblair/ATS-Postiats-Contrib my-ats2-contrib
+  - export PATSHOMERELOC=${TRAVIS_BUILD_DIR}/my-ats2-contrib
   - export PKG_CONFIG_PATH=${HOME}/pkg/lib/pkgconfig/
   - export LD_LIBRARY_PATH=${HOME}/pkg/lib/
+  - export C_INCLUDE_PATH=${HOME}/pkg/include/
+  - wget https://github.com/Z3Prover/z3/releases/download/z3-4.4.1/z3-4.4.1-x64-ubuntu-14.04.zip
+  - unzip z3-4.4.1-x64-ubuntu-14.04.zip
+  - (cd z3-4.4.1-x64-ubuntu-14.04 && cp bin/lib* ${HOME}/pkg/lib/ && cp include/* ${HOME/pkg/include/})
+  
 script:
   # Building ATS2
   - export PATSHOME=${HOME}/ATS2-srcfrg
   - export PATH=${PATH}:${PATSHOME}/bin
   - (cd ${PATSHOME} && ./configure && make all)
   - export PATH=${HOME}/bin:${PATH}
-  # Download my ATS2 Contrib
-  - git clone https://github.com/wdblair/ATS-Postiats-Contrib my-ats2-contrib
   - (cd my-ats2-contrib/projects/MEDIUM/ATS-extsolve && make)
-  
+
+
 after_script:
   - date
