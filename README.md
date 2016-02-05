@@ -1,6 +1,8 @@
 Overture
 ========
 
+[![Build Status](https://travis-ci.org/wdblair/overture.svg?branch=master)](https://travis-ci.org/wdblair/overture)
+
 Overture is an implementation of the Prelude programming language that
 experiments with using ATS as a compiler and verification back end. Prelude
 is a synchronous architecture design language for constructing real-time
