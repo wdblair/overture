@@ -1,0 +1,16 @@
+# the vendored toolchain: the image bootstraps its own (Linux) ATS2
+ATS2-Postiats-int-0.4.2/
+ATS-Postiats-contrib/
+
+.git/
+
+# build products
+src/*.o
+src/*_sats.c
+src/*_dats.c
+src/overture
+src/.depend
+tests/*.out
+
+*.swp
+.DS_Store

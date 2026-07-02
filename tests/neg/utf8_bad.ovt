@@ -1,0 +1,1 @@
+sensor tempé : rate(int, (10,0));

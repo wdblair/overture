@@ -1,0 +1,3 @@
+sensor s : rate(int, (10, true));
+actuator a : rate(int, (10, 0));
+a = s;

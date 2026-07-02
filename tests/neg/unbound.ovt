@@ -1,0 +1,2 @@
+actuator a : rate(int, (10, 0));
+a = nowhere;

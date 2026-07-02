@@ -1,0 +1,23 @@
+(* existential output clocks: the node picks a witness *)
+
+sensor s : rate(int, (10, 0));
+actuator a : rate(int, (10, 3));
+
+(* an extern node's existential output must be determined by its
+   guard: the implementation's witness has to be schedulable *)
+extern node delay {c: clock}
+  (i : rate(int, c))
+  returns (o : [q: clock | period(q) == period(c)
+                        && date(q) == date(c) + period(c)]
+                 rate(int, q));
+
+node delay3 {c: clock}
+  (i : rate(int, c))
+  returns (o : [q: clock | period(q) == period(c)
+                        && date(q) == date(c) + 3 * period(c)]
+                 rate(int, q))
+let
+  o = shift(i, 3);
+tel
+
+a = delay3(s);

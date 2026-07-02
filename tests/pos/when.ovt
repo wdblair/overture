@@ -1,0 +1,15 @@
+(* the paper's Figure 2: alert carries the temperature only when
+   fault produces true *)
+
+sensor temperature : rate(int, (10, 0));
+sensor fault : rate(bool, (100, 0));
+actuator alert : rate(gated, int, (100, 0));
+
+node monitor {c: clock | 10 | period(c)}
+  (temp : rate(int, c), f : rate(bool, c ^/ 10))
+  returns (a : rate(gated, int, c ^/ 10))
+let
+  a = (temp ^/ 10) when f;
+tel
+
+alert = monitor(temperature, fault);

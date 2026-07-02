@@ -1,0 +1,11 @@
+sensor s : rate(int, (10, 0));
+actuator a : rate(int, (10, 0));
+
+(* the guard leaves the witness's date unpinned: rejected, since the
+   consumer's release offset would be unknowable at compile time *)
+extern node delay {c: clock}
+  (i : rate(int, c))
+  returns (o : [q: clock | period(q) == period(c) && date(q) >= date(c)]
+                 rate(int, q));
+
+a = s;

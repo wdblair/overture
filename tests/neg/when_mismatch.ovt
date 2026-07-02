@@ -1,0 +1,6 @@
+sensor x : rate(int, (10, 0));
+sensor b : rate(bool, (100, 0));
+actuator a : rate(gated, int, (10, 0));
+
+(* the gate must run at the flow's own clock *)
+a = x when b;

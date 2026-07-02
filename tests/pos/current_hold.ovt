@@ -1,0 +1,7 @@
+(* current holds the last present value of a gated flow *)
+
+sensor x : rate(int, (10, 0));
+sensor b : rate(bool, (10, 0));
+actuator a : rate(int, (10, 0));
+
+a = current(0, x when b);

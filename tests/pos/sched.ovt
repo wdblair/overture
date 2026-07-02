@@ -1,0 +1,11 @@
+(* a feasible task set: 3 + 4 <= 10 in every slot *)
+
+sensor s : rate(int, (10, 0));
+actuator a : rate(int, (10, 0));
+
+extern node f (i : rate(int, (10, 0))) returns (o : rate(int, (10, 0)))
+  wcet 3;
+extern node g (i : rate(int, (10, 0))) returns (o : rate(int, (10, 0)))
+  wcet 4;
+
+a = g(f(s));

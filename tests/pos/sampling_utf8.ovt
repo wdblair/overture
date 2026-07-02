@@ -1,0 +1,22 @@
+(* same system, using the UTF-8 quantifier syntax *)
+
+sensor temp : rate(int, (10, 0));
+actuator alert : rate(int, (100, 0));
+
+extern node controller ∀ c: clock.
+  (i : rate(int, c), j : rate(int, c))
+  returns (o : rate(int, c), p : rate(int, c));
+
+extern node database ∀ c: clock ∣ true.
+  (i : rate(int, c)) returns (o : rate(int, c));
+
+node sampling ∀ c: clock ∣ 10 | period(c).
+  (i : rate(int, c)) returns (o : rate(int, c ^/ 10))
+  var command : rate(int, c ^/ 10);
+  var response : rate(int, c);
+let
+  (o, command) = controller(i ^/ 10, (0 fby response) ^/ 10);
+  response = database(command */ 10);
+tel
+
+alert = sampling(temp);

@@ -1,0 +1,10 @@
+sensor s : rate(int, (10, 0));
+actuator a : rate(int, (10, 0));
+extern node odd {c: clock; d: clock | period(c) * period(d) == 100}
+  (i : rate(int, c), j : rate(int, d)) returns (o : rate(int, c));
+node use {c: clock; d: clock | period(c) * period(d) == 100}
+  (i : rate(int, c), j : rate(int, d)) returns (o : rate(int, c))
+let
+  o = odd(i, j);
+tel
+a = use(s, s);

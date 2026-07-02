@@ -1,0 +1,10 @@
+sensor s : rate(int, (10, 0));
+actuator a : rate(int, (10, 0));
+
+node f {c: clock} (i : rate(int, c)) returns (o : rate(int, c))
+  wcet 3
+let
+  o = i;
+tel
+
+a = f(s);

@@ -1,0 +1,15 @@
+(* payload polymorphism: a generic sampler *)
+
+sensor temp : rate(int, (10, 0));
+sensor fault : rate(bool, (10, 0));
+actuator slow_temp : rate(int, (100, 0));
+actuator slow_fault : rate(bool, (100, 0));
+
+node {a:type} decimate {c: clock | 10 | period(c)}
+  (i : rate(a, c)) returns (o : rate(a, c ^/ 10))
+let
+  o = i ^/ 10;
+tel
+
+slow_temp = decimate(temp);
+slow_fault = decimate(fault);

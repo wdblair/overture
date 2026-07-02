@@ -1,0 +1,17 @@
+# ATS2 build products
+*_sats.c
+*_dats.c
+*.o
+.depend
+src/overture
+
+# any vendored ATS2 distribution and contrib folder are not part of this repo
+ATS2-Postiats-int-0.*.*/
+ATS-Postiats-contrib/
+
+# misc
+*~
+.DS_Store
+tests/*.out
+dist/
+.claude

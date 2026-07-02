@@ -1,0 +1,17 @@
+(* kind polymorphism: one node passes both strict and gated flows *)
+
+sensor x : rate(int, (10, 0));
+sensor b : rate(bool, (10, 0));
+actuator a1 : rate(int, (10, 0));
+actuator a2 : rate(gated, int, (10, 0));
+
+(* template-flavored quantifiers sit before the name: the kind and
+   payload are specialization axes, the clock is a DML static *)
+node {k: kind} {a: type} pass {c: clock}
+  (i : rate(k, a, c)) returns (o : rate(k, a, c))
+let
+  o = i;
+tel
+
+a1 = pass(x);
+a2 = pass(x when b);

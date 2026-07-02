@@ -1,0 +1,22 @@
+(* the clock transformation operators, at ground clocks *)
+
+sensor s : rate(int, (10, 0));
+sensor b : rate(bool, (10, 0));
+actuator a1 : rate(int, (10, 0));
+actuator a2 : rate(int, (10, 1));
+actuator a3 : rate(int, (10, 1/2));
+actuator a4 : rate(int, (10, 0));
+
+extern node id {c: clock} (i : rate(int, c)) returns (o : rate(int, c));
+
+(* fby keeps the clock *)
+a1 = 0 fby s;
+
+(* tail(cons(0, x)) restores the phase: (p - 1) + 1 *)
+a2 = tail(cons(0, shift(s, 1)));
+
+(* a rational shift on period 10: date moves by 5 *)
+a3 = shift(s, 1/2);
+
+(* merge at a common clock *)
+a4 = merge(b, s, id(s));

@@ -1,0 +1,7 @@
+(* rational phases: (10, 1/2) has activation date 5 *)
+
+sensor s : rate(int, (10, 1/2));
+actuator a : rate(int, (100, 1/20));
+
+(* undersampling leaves the date (5) unchanged: (100, 5/100) *)
+a = s ^/ 10;

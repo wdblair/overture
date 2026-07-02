@@ -1,0 +1,3 @@
+actuator a : rate(int, (10, 5));
+extern node gen {k: int} () returns (o : rate(int, (10, k)));
+a = gen();

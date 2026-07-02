@@ -1,0 +1,10 @@
+sensor s : rate(int, (10, 0));
+actuator a : rate(int, (10, 0));
+
+(* no guard bounds the period from below: a period-1 or period-2
+   instantiation would violate the synchronous hypothesis *)
+extern node controller {c: clock}
+  (i : rate(int, c)) returns (o : rate(int, c))
+  wcet 3;
+
+a = controller(s);

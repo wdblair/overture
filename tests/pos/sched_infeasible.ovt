@@ -1,0 +1,14 @@
+(* each task alone satisfies wcet <= period (the type system's
+   necessary condition), but 6 + 6 > 10: jointly infeasible. This
+   program TYPECHECKS; the ATS backend's generated code does not --
+   the schedule certificate rejects it at patsopt time. *)
+
+sensor s : rate(int, (10, 0));
+actuator a : rate(int, (10, 0));
+
+extern node f (i : rate(int, (10, 0))) returns (o : rate(int, (10, 0)))
+  wcet 6;
+extern node g (i : rate(int, (10, 0))) returns (o : rate(int, (10, 0)))
+  wcet 6;
+
+a = g(f(s));

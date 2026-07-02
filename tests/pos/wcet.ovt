@@ -1,0 +1,21 @@
+(* wcet declarations: the guard must entail wcet <= period for every
+   interface clock; the wcet expression may mention the statics *)
+
+sensor s : rate(int, (10, 0));
+actuator a : rate(int, (10, 0));
+
+extern node controller {c: clock | period(c) >= 3}
+  (i : rate(int, c)) returns (o : rate(int, c))
+  wcet 3;
+
+(* a parametric cost over the universals: 2*k must fit the period *)
+extern node reader {c: clock; k: int | k > 0 && 2 * k <= period(c)}
+  (i : rate(int, c)) returns (o : rate(int, c))
+  wcet 2 * k;
+
+(* ground clocks work too: 4 <= 10 *)
+extern node fixed
+  (i : rate(int, (10, 0))) returns (o : rate(int, (10, 0)))
+  wcet 4;
+
+a = controller(s);

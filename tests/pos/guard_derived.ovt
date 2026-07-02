@@ -1,0 +1,13 @@
+(* a divisibility obligation provable only through the hypotheses *)
+
+sensor s : rate(int, (20, 0));
+actuator a : rate(int, (40, 0));
+
+(* 20 | period(c) implies 2 | period(c) *)
+node halve {c: clock | (2 | period(c))}
+  (i : rate(int, c)) returns (o : rate(int, c ^/ 2))
+let
+  o = i ^/ 2;
+tel
+
+a = halve(s);

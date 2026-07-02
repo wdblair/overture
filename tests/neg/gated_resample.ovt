@@ -1,0 +1,6 @@
+sensor x : rate(int, (10, 0));
+sensor b : rate(bool, (10, 0));
+actuator a : rate(gated, int, (20, 0));
+
+(* gated flows are terminal in the clock calculus *)
+a = (x when b) ^/ 2;
