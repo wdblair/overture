@@ -1,5 +1,7 @@
 # Overture
 
+[![CI](https://github.com/wdblair/overture/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/wdblair/overture/actions/workflows/ci.yml)
+
 A synchronous data-flow language with dependently typed clocks, implemented as
 a standalone compiler written in, and heavily inspired by, [ATS2/Postiats].
 Overture grows out of *Dependent Types for Multi-Rate Flows in Synchronous
