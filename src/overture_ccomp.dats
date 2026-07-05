@@ -138,14 +138,14 @@ case+ s2e.s2e_node of
           in
             @(n, d)
           end
-        | "*/" => let
+        | "*^" => let
             val nd = eval_clk (a1)
             val k = eval_int (a2)
           in
             if k = 0 then (cgerr ("codegen: oversampling by zero"); @(1, 0))
             else @(nd.0 / k, nd.1)
           end
-        | "^/" => let
+        | "/^" => let
             val nd = eval_clk (a1)
             val k = eval_int (a2)
           in
@@ -692,11 +692,11 @@ apply_builtin
 (
 case+ name of
 //
-| _ when (name = "*/") orelse (name = "^/") => (
+| _ when (name = "*^") orelse (name = "/^") => (
     case+ fvs of
     | list0_cons (f, list0_cons (FVint (k), list0_nil ())) => let
         val c = fval_cell (f, name)
-        val n2 = (if name = "*/" then c.c_n / k else c.c_n * k): int
+        val n2 = (if name = "*^" then c.c_n / k else c.c_n * k): int
         val out = cell_new (ctx, c.c_bool, n2, c.c_d)
         val () = emit_strict (ctx, ACTcopy (FVcell (c), out))
       in

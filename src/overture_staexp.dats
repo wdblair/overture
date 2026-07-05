@@ -723,8 +723,8 @@ val cst_strict = mkcst ("strict", l0 (), S2RTkind ())
 val cst_gated = mkcst ("gated", l0 (), S2RTkind ())
 //
 val cst_clk = mkcst ("clk", l2 (int, rat), clock)
-val cst_over = mkcst ("*/", l2 (clock, int), clock)
-val cst_under = mkcst ("^/", l2 (clock, int), clock)
+val cst_over = mkcst ("*^", l2 (clock, int), clock)
+val cst_under = mkcst ("/^", l2 (clock, int), clock)
 val cst_shift = mkcst ("shift", l2 (clock, rat), clock)
 //
 val _period = mkcst ("period", l1 (clock), int)
@@ -823,8 +823,8 @@ val sym_a = symbol_make ("a")
 val sym_c = symbol_make ("c")
 val sym_k = symbol_make ("k")
 //
-// */ : {a:type}{c:clock; k:int | k > 0 && k | period(c)}
-//      (rate(a, c), int(k)) -> rate(a, c */ k)
+// *^ : {a:type}{c:clock; k:int | k > 0 && k | period(c)}
+//      (rate(a, c), int(k)) -> rate(a, c *^ k)
 //
 val () = let
   val a = s2var_make (sym_a, S2RTtype ())
@@ -838,13 +838,17 @@ val () = let
   val g = app2 (_andb, g1, g2, bool)
   val resclk = app2 (cst_over, v2exp (c), v2exp (k), clock)
 in
-  mksig ("*/", lv1 (a), lv2 (c, k), g
+  mksig ("*^", lv1 (a), lv2 (c, k), g
   , lt2 (rt (T2YPEvar (a), v2exp (c)), T2YPEsta (v2exp (k)))
   , rt (T2YPEvar (a), resclk))
 end // end of [val]
 //
-// ^/ : {a:type}{c:clock; k:int | k > 0 && k | period(c)}
-//      (rate(a, c), int(k)) -> rate(a, c ^/ k)
+// /^ : {a:type}{c:clock; k:int | k > 0}
+//      (rate(a, c), int(k)) -> rate(a, c /^ k)
+//
+// undersampling multiplies the period, (n, d) -> (n*k, d), so the
+// lowered clock is integral for any positive k; only oversampling
+// (which divides the period) carries a divisibility guard.
 //
 val () = let
   val a = s2var_make (sym_a, S2RTtype ())
@@ -852,13 +856,10 @@ val () = let
   val k = s2var_make (sym_k, int)
   val gt = the_s2csttbl_search (symbol_make (">"), l2 (int, int))
   val- Some0 (cst_gt) = gt
-  val g1 = app2 (cst_gt, v2exp (k), s2exp_int (loc0, 0), bool)
-  val prd = app1 (_period, v2exp (c), int)
-  val g2 = app2 (cst_divides, v2exp (k), prd, bool)
-  val g = app2 (_andb, g1, g2, bool)
+  val g = app2 (cst_gt, v2exp (k), s2exp_int (loc0, 0), bool)
   val resclk = app2 (cst_under, v2exp (c), v2exp (k), clock)
 in
-  mksig ("^/", lv1 (a), lv2 (c, k), g
+  mksig ("/^", lv1 (a), lv2 (c, k), g
   , lt2 (rt (T2YPEvar (a), v2exp (c)), T2YPEsta (v2exp (k)))
   , rt (T2YPEvar (a), resclk))
 end // end of [val]
