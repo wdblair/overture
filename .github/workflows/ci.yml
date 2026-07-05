@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  build-and-test:
+  ci:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -15,16 +15,31 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Building the [test] stage compiles the Overture compiler and
-      # runs the full harness (typechecking positives/negatives plus
-      # end-to-end codegen: generate, compile with patscc, run,
-      # golden-check). The ATS2 toolchain layer is cached, so runs
-      # after the first only rebuild Overture itself.
-      - name: Build and test
+      # Compiles the Overture compiler inside the toolchain image.
+      # The ATS2/ARM/QEMU layer is cached, so runs after the first
+      # only rebuild Overture itself.
+      - name: Build
         uses: docker/build-push-action@v6
         with:
           context: .
-          target: test
+          target: build
+          tags: overture-ci
           push: false
+          load: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # The host harness: typechecking positives/negatives plus
+      # end-to-end codegen (generate, compile with patscc, run,
+      # golden-check).
+      - name: Unit Tests
+        run: docker run --rm overture-ci tests/run_tests.sh
+
+      # Hardware in the loop, emulated: build heartbeat.ovt with the
+      # ats-bare backend (the patsopt run that compiles the harness
+      # proves the schedule), boot it on QEMU's Cortex-M7 machine,
+      # and diff the UART transcript against the golden file.
+      - name: QEMU Tests
+        run: >
+          docker run --rm overture-ci
+          make -C examples/mps2 hil-qemu TC=/usr/bin QEMU=qemu-system-arm

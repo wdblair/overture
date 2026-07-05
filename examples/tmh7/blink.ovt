@@ -1,0 +1,21 @@
+(* a real sensor: the Cortex-M7 DWT cycle counter, sampled on a fast
+   10 ms grid and undersampled to a steady 1 s heartbeat on the LEDs.
+   One tick = 1 ms.
+
+   Undersampling needs no divisibility -- (n, d) -> (n*k, d) is
+   integral for any k > 0 -- so the 10 ms grid goes straight to
+   1000 ms: (10,0) /^ 100 = (1000,0).
+
+   The LED stub toggles on every actuation -- the 1 s cadence is
+   guaranteed by the clock, not computed from the value. The value
+   (the newest cycle count) rides along for the flight recorder:
+   consecutive reports should differ by ~64,000,000 cycles. *)
+
+sensor cycles : rate(int, (10, 0));
+actuator led : rate(int, (1000, 0));
+
+extern node latest {c: clock}
+  (i : rate(int, c)) returns (o : rate(int, c))
+  wcet 1;
+
+led = latest(cycles /^ 100);
