@@ -89,7 +89,7 @@ extern node controller {c: clock}
 extern node database {c: clock}
   (i : rate(int, c)) returns (o : rate(int, c));
 
-node sampling {c: clock | 10 | period(c)}
+node sampling {c: clock}
   (i : rate(int, c)) returns (o : rate(int, c ^/ 10))
   var command : rate(int, c ^/ 10);
   var response : rate(int, c);
@@ -103,14 +103,28 @@ alert = sampling(temp);
 
 Node bodies are unordered systems of equations: `response` is read
 (under a `fby`) before its defining equation. The universal
-quantifier `{c: clock | 10 | period(c)}` makes `sampling` polymorphic
-over every clock whose period is divisible by ten; the typechecker
-proves each obligation with a built-in linear integer solver, and
-unsatisfied ones are reported in surface syntax:
+quantifier `{c: clock}` makes `sampling` polymorphic over every
+clock; the typechecker proves each obligation with a built-in linear
+integer solver. Here they all discharge arithmetically — note that
+`command */ 10` oversamples a flow whose period is already
+`10 * period(c)`, so its divisibility obligation holds for any `c`.
+A node that oversamples its *input*, by contrast, genuinely
+constrains the clocks it accepts, and must say so in its quantifier:
 
 ```
-error: unsolved constraint: guard of [^/]
-  needed: (10 | period(c))
+node upsample {c: clock | 4 | period(c)}
+  (i : rate(int, c)) returns (o : rate(int, c */ 4))
+let
+  o = i */ 4;
+tel
+```
+
+Omit the guard and the unsatisfied obligation is reported in
+surface syntax:
+
+```
+error: unsolved constraint: guard of [*/]
+  needed: (4 | period(c))
   hypotheses: true
 ```
 
@@ -118,8 +132,8 @@ Quantifiers may equivalently be written with literal UTF-8, as in
 Lean — an editor can insert them:
 
 ```
-node sampling ∀ c: clock ∣ 10 | period(c).
-  (i : rate(int, c)) returns (o : rate(int, c ^/ 10))
+node upsample ∀ c: clock ∣ 4 | period(c).
+  (i : rate(int, c)) returns (o : rate(int, c */ 4))
 ```
 
 Existential quantifiers describe node outputs. For an *extern* node
@@ -149,7 +163,7 @@ with infix operators shared by the statics and the term level
 | operator | clock | guard |
 |---|---|---|
 | `f */ k` (oversample) | `(n/k, p*k)` | `k > 0 && k \| period(c)` |
-| `f ^/ k` (undersample) | `(n*k, p/k)` | `k > 0 && k \| period(c)` |
+| `f ^/ k` (undersample) | `(n*k, p/k)` | `k > 0` |
 | `shift(f, k)`, `k : rat` | `(n, p+k)` | `isint(k * period(c))` |
 | `v fby f` | unchanged | |
 | `cons(v, f)` / `tail(f)` | phase −1 / +1 | `date(c) >= period(c)` for cons |

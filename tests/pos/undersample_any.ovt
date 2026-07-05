@@ -1,0 +1,10 @@
+(*
+** undersampling needs no divisibility: (n, d) -> (n*k, d) is
+** integral for any k > 0, so a period-10 flow may be taken
+** straight to period 1000.
+*)
+
+sensor s : rate(int, (10, 0));
+actuator a : rate(int, (1000, 0));
+
+a = s ^/ 100;

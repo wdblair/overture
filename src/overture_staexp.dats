@@ -843,8 +843,12 @@ in
   , rt (T2YPEvar (a), resclk))
 end // end of [val]
 //
-// ^/ : {a:type}{c:clock; k:int | k > 0 && k | period(c)}
+// ^/ : {a:type}{c:clock; k:int | k > 0}
 //      (rate(a, c), int(k)) -> rate(a, c ^/ k)
+//
+// undersampling multiplies the period, (n, d) -> (n*k, d), so the
+// lowered clock is integral for any positive k; only oversampling
+// (which divides the period) carries a divisibility guard.
 //
 val () = let
   val a = s2var_make (sym_a, S2RTtype ())
@@ -852,10 +856,7 @@ val () = let
   val k = s2var_make (sym_k, int)
   val gt = the_s2csttbl_search (symbol_make (">"), l2 (int, int))
   val- Some0 (cst_gt) = gt
-  val g1 = app2 (cst_gt, v2exp (k), s2exp_int (loc0, 0), bool)
-  val prd = app1 (_period, v2exp (c), int)
-  val g2 = app2 (cst_divides, v2exp (k), prd, bool)
-  val g = app2 (_andb, g1, g2, bool)
+  val g = app2 (cst_gt, v2exp (k), s2exp_int (loc0, 0), bool)
   val resclk = app2 (cst_under, v2exp (c), v2exp (k), clock)
 in
   mksig ("^/", lv1 (a), lv2 (c, k), g

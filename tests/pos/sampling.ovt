@@ -10,7 +10,7 @@ extern node controller {c: clock}
 extern node database {c: clock}
   (i : rate(int, c)) returns (o : rate(int, c));
 
-node sampling {c: clock | 10 | period(c)}
+node sampling {c: clock}
   (i : rate(int, c)) returns (o : rate(int, c ^/ 10))
   var command : rate(int, c ^/ 10);
   var response : rate(int, c);
