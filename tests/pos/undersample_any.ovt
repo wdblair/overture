@@ -7,4 +7,4 @@
 sensor s : rate(int, (10, 0));
 actuator a : rate(int, (1000, 0));
 
-a = s ^/ 100;
+a = s /^ 100;

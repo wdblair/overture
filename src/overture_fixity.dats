@@ -77,8 +77,8 @@ val () = fxleft ("+", 70)
 val () = fxleft ("-", 70)
 val () = fxleft ("*", 80)
 val () = fxleft ("/", 80)
-val () = fxleft ("*/", 90)
-val () = fxleft ("^/", 90)
+val () = fxleft ("*^", 90)
+val () = fxleft ("/^", 90)
 //
 in
   // nothing

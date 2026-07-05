@@ -367,7 +367,7 @@ case+ s2e.s2e_node of
             | (LFerr (l0, m0), _) => CLerr (l0, m0)
             | (_, LFerr (l0, m0)) => CLerr (l0, m0)
           )
-        | "*/" => (
+        | "*^" => (
             (* dates are invariant: (n/k, d) *)
             case+ (lower_clk (ctx, a1), lower_num (ctx, a2)) of
             | (CLok (prd, dat), LFok fk) =>
@@ -380,7 +380,7 @@ case+ s2e.s2e_node of
             | (CLerr (l0, m0), _) => CLerr (l0, m0)
             | (_, LFerr (l0, m0)) => CLerr (l0, m0)
           )
-        | "^/" => (
+        | "/^" => (
             case+ (lower_clk (ctx, a1), lower_num (ctx, a2)) of
             | (CLok (prd, dat), LFok fk) =>
                 if lf_is_const (fk)

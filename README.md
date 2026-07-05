@@ -90,12 +90,12 @@ extern node database {c: clock}
   (i : rate(int, c)) returns (o : rate(int, c));
 
 node sampling {c: clock}
-  (i : rate(int, c)) returns (o : rate(int, c ^/ 10))
-  var command : rate(int, c ^/ 10);
+  (i : rate(int, c)) returns (o : rate(int, c /^ 10))
+  var command : rate(int, c /^ 10);
   var response : rate(int, c);
 let
-  (o, command) = controller(i ^/ 10, (0 fby response) ^/ 10);
-  response = database(command */ 10);
+  (o, command) = controller(i /^ 10, (0 fby response) /^ 10);
+  response = database(command *^ 10);
 tel
 
 alert = sampling(temp);
@@ -106,16 +106,16 @@ Node bodies are unordered systems of equations: `response` is read
 quantifier `{c: clock}` makes `sampling` polymorphic over every
 clock; the typechecker proves each obligation with a built-in linear
 integer solver. Here they all discharge arithmetically — note that
-`command */ 10` oversamples a flow whose period is already
+`command *^ 10` oversamples a flow whose period is already
 `10 * period(c)`, so its divisibility obligation holds for any `c`.
 A node that oversamples its *input*, by contrast, genuinely
 constrains the clocks it accepts, and must say so in its quantifier:
 
 ```
 node upsample {c: clock | 4 | period(c)}
-  (i : rate(int, c)) returns (o : rate(int, c */ 4))
+  (i : rate(int, c)) returns (o : rate(int, c *^ 4))
 let
-  o = i */ 4;
+  o = i *^ 4;
 tel
 ```
 
@@ -123,7 +123,7 @@ Omit the guard and the unsatisfied obligation is reported in
 surface syntax:
 
 ```
-error: unsolved constraint: guard of [*/]
+error: unsolved constraint: guard of [*^]
   needed: (4 | period(c))
   hypotheses: true
 ```
@@ -133,7 +133,7 @@ Lean — an editor can insert them:
 
 ```
 node upsample ∀ c: clock ∣ 4 | period(c).
-  (i : rate(int, c)) returns (o : rate(int, c */ 4))
+  (i : rate(int, c)) returns (o : rate(int, c *^ 4))
 ```
 
 Existential quantifiers describe node outputs. For an *extern* node
@@ -162,8 +162,8 @@ with infix operators shared by the statics and the term level
 
 | operator | clock | guard |
 |---|---|---|
-| `f */ k` (oversample) | `(n/k, p*k)` | `k > 0 && k \| period(c)` |
-| `f ^/ k` (undersample) | `(n*k, p/k)` | `k > 0` |
+| `f *^ k` (oversample) | `(n/k, p*k)` | `k > 0 && k \| period(c)` |
+| `f /^ k` (undersample) | `(n*k, p/k)` | `k > 0` |
 | `shift(f, k)`, `k : rat` | `(n, p+k)` | `isint(k * period(c))` |
 | `v fby f` | unchanged | |
 | `cons(v, f)` / `tail(f)` | phase −1 / +1 | `date(c) >= period(c)` for cons |
@@ -231,7 +231,7 @@ completely.
 
 Internally the solver lowers every clock to the **integer** pair
 (period, activation date `d = n*p`): validity is structural rather
-than a constraint, `*/` and `^/` leave dates invariant, and every
+than a constraint, `*^` and `/^` leave dates invariant, and every
 operator stays linear — which is what keeps Fourier–Motzkin
 elimination applicable. Obligations are checked by refuting
 hypotheses ∧ ¬goal (Gaussian elimination, integer-tightened FM);
@@ -249,7 +249,7 @@ integer timeline whose unit we call a **tick**:
   (`n * k`), `wcet` declarations, the date `t` passed to sensors and
   actuators, and the tick-count argument of generated programs;
 - **dimensionless**: phase offsets (a fraction of the period) and
-  the sampling factors of `*/` and `^/` (ratios between rates).
+  the sampling factors of `*^` and `/^` (ratios between rates).
 
 The typechecker never interprets the unit, and every judgement is
 invariant under a global rescaling of it: multiplying all literal
@@ -359,7 +359,7 @@ patscc -DATS_MEMALLOC_LIBC -o sampling \
 function firing each action when its ground clock `(n, d)` says so
 (`t >= d && (t - d) mod n == 0`), and a main loop over logical base
 ticks (gcd of the periods). Clock operators compile to their
-value-level residue: `*/`/`^/` are latest-value copies (dates are
+value-level residue: `*^`/`/^` are latest-value copies (dates are
 invariant), `shift`/`tail` are ring-buffered delay lines of depth
 `s/n + 1` (the calculus requires value-preserving delays: `fby(x, f)
 = cons(x, shift(f, 1))` fails with re-sampling registers), `fby` is

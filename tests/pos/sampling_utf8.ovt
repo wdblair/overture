@@ -11,12 +11,12 @@ extern node database ∀ c: clock ∣ true.
   (i : rate(int, c)) returns (o : rate(int, c));
 
 node sampling ∀ c: clock ∣ 10 | period(c).
-  (i : rate(int, c)) returns (o : rate(int, c ^/ 10))
-  var command : rate(int, c ^/ 10);
+  (i : rate(int, c)) returns (o : rate(int, c /^ 10))
+  var command : rate(int, c /^ 10);
   var response : rate(int, c);
 let
-  (o, command) = controller(i ^/ 10, (0 fby response) ^/ 10);
-  response = database(command */ 10);
+  (o, command) = controller(i /^ 10, (0 fby response) /^ 10);
+  response = database(command *^ 10);
 tel
 
 alert = sampling(temp);

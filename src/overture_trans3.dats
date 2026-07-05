@@ -616,7 +616,7 @@ case+ s2e.s2e_node of
     case+ args of
     | list0_cons (c, list0_cons (k, list0_nil ())) => (
         case+ name of
-        | "*/" => let
+        | "*^" => let
             (* oversampling divides the period: (n, d) -> (n/k, d) *)
             val prd = mk_app1 (loc, "period", c1, c)
           in
@@ -629,12 +629,12 @@ case+ s2e.s2e_node of
               )
             | None0 () => ()
           end
-        | "^/" => (
+        | "/^" => (
             (* undersampling multiplies the period: (n, d) -> (n*k, d);
                integral for any k > 0, no divisibility required *)
             case+ mk_app2 (loc, ">", ii, k, s2exp_int (loc, 0)) of
             | Some0 (g) => c3acc_prop (acc, loc,
-                "positivity for the clock operator [^/]", g)
+                "positivity for the clock operator [/^]", g)
             | None0 () => ()
           )
         | "shift" => let
