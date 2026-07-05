@@ -90,8 +90,8 @@ extern node database {c: clock}
   (i : rate(int, c)) returns (o : rate(int, c));
 
 node sampling {c: clock}
-  (i : rate(int, c)) returns (o : rate(int, c /^ 10))
-  var command : rate(int, c /^ 10);
+  (i : rate(int, c)) returns (o : rate(int, c * 10))
+  var command : rate(int, c * 10);
   var response : rate(int, c);
 let
   (o, command) = controller(i /^ 10, (0 fby response) /^ 10);
@@ -113,7 +113,7 @@ constrains the clocks it accepts, and must say so in its quantifier:
 
 ```
 node upsample {c: clock | 4 | period(c)}
-  (i : rate(int, c)) returns (o : rate(int, c *^ 4))
+  (i : rate(int, c)) returns (o : rate(int, c / 4))
 let
   o = i *^ 4;
 tel
@@ -133,7 +133,7 @@ Lean — an editor can insert them:
 
 ```
 node upsample ∀ c: clock ∣ 4 | period(c).
-  (i : rate(int, c)) returns (o : rate(int, c *^ 4))
+  (i : rate(int, c)) returns (o : rate(int, c / 4))
 ```
 
 Existential quantifiers describe node outputs. For an *extern* node
@@ -157,17 +157,21 @@ tel
 ## The Clock Calculus
 
 Clock transformations are static functions of sort `clock`, applied
-with infix operators shared by the statics and the term level
-(fixity comes from declarations, defaults built in):
+with infix operators (fixity comes from declarations, defaults
+built in). Sampling a flow and transforming a clock are different
+operations and spell differently: term-level `*^`/`/^` resample a
+flow, while on clocks the result is written as plain arithmetic
+on the period -- oversampling divides the clock, undersampling
+multiplies it:
 
-| operator | clock | guard |
-|---|---|---|
-| `f *^ k` (oversample) | `(n/k, p*k)` | `k > 0 && k \| period(c)` |
-| `f /^ k` (undersample) | `(n*k, p/k)` | `k > 0` |
-| `shift(f, k)`, `k : rat` | `(n, p+k)` | `isint(k * period(c))` |
-| `v fby f` | unchanged | |
-| `cons(v, f)` / `tail(f)` | phase −1 / +1 | `date(c) >= period(c)` for cons |
-| `merge(b, f, g)` | common clock | |
+| operator | result type | clock | guard |
+|---|---|---|---|
+| `f *^ k` (oversample) | `rate(a, c / k)` | `(n/k, p*k)` | `k > 0 && k \| period(c)` |
+| `f /^ k` (undersample) | `rate(a, c * k)` | `(n*k, p/k)` | `k > 0` |
+| `shift(f, k)`, `k : rat` | `rate(a, shift(c, k))` | `(n, p+k)` | `isint(k * period(c))` |
+| `v fby f` | unchanged | | |
+| `cons(v, f)` / `tail(f)` | | phase −1 / +1 | `date(c) >= period(c)` for cons |
+| `merge(b, f, g)` | | common clock | |
 | `f when b` | `rate(gated, a, c)` at the common clock | |
 | `current(v, bf)` | `rate(gated, a, c)` back to `rate(a, c)` | |
 
@@ -231,7 +235,7 @@ completely.
 
 Internally the solver lowers every clock to the **integer** pair
 (period, activation date `d = n*p`): validity is structural rather
-than a constraint, `*^` and `/^` leave dates invariant, and every
+than a constraint, clock `*` and `/` leave dates invariant, and every
 operator stays linear — which is what keeps Fourier–Motzkin
 elimination applicable. Obligations are checked by refuting
 hypotheses ∧ ¬goal (Gaussian elimination, integer-tightened FM);

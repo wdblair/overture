@@ -355,7 +355,7 @@ case+ s2e.s2e_node of
     case+ args of
     | list0_cons (a1, list0_cons (a2, list0_nil ())) => (
         case+ name of
-        | "clk" => (
+        | _ when s2cst_is_clk (s2c) => (
             case+ (lower_num (ctx, a1), lower_num (ctx, a2)) of
             | (LFok fn_, LFok fp) =>
                 if lf_is_const (fp)
@@ -367,20 +367,21 @@ case+ s2e.s2e_node of
             | (LFerr (l0, m0), _) => CLerr (l0, m0)
             | (_, LFerr (l0, m0)) => CLerr (l0, m0)
           )
-        | "*^" => (
+        | _ when s2cst_is_over (s2c) => (
             (* dates are invariant: (n/k, d) *)
             case+ (lower_clk (ctx, a1), lower_num (ctx, a2)) of
             | (CLok (prd, dat), LFok fk) =>
                 if lf_is_const (fk) then (
                   if fk.lf_c = 0
-                    then CLerr (loc, "oversampling by zero")
+                    then CLerr (loc, "clock division by zero")
                     else CLok (lf_scale (prd, fk.lf_den, fk.lf_c), dat)
                 ) else CLerr (loc,
                   "nonlinear clock: the sampling factor must be a constant")
             | (CLerr (l0, m0), _) => CLerr (l0, m0)
             | (_, LFerr (l0, m0)) => CLerr (l0, m0)
           )
-        | "/^" => (
+        | _ when s2cst_is_under (s2c) => (
+            (* (n*k, d) *)
             case+ (lower_clk (ctx, a1), lower_num (ctx, a2)) of
             | (CLok (prd, dat), LFok fk) =>
                 if lf_is_const (fk)
@@ -390,7 +391,7 @@ case+ s2e.s2e_node of
             | (CLerr (l0, m0), _) => CLerr (l0, m0)
             | (_, LFerr (l0, m0)) => CLerr (l0, m0)
           )
-        | "shift" => (
+        | _ when s2cst_is_shift (s2c) => (
             (* (n, d + n * k) *)
             case+ (lower_clk (ctx, a1), lower_num (ctx, a2)) of
             | (CLok (prd, dat), LFok fk) =>

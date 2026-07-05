@@ -170,10 +170,20 @@ fun s2cst_false (): s2cst
 fun s2cst_strict (): s2cst   (* strict : kind *)
 fun s2cst_gated (): s2cst    (* gated : kind *)
 fun s2cst_clk (): s2cst      (* clk : (int, rat) -> clock *)
-fun s2cst_over (): s2cst     (* * / : (clock, int) -> clock *)
-fun s2cst_under (): s2cst    (* ^/ : (clock, int) -> clock *)
+fun s2cst_over (): s2cst     (* / : (clock, int) -> clock, period/k *)
+fun s2cst_under (): s2cst    (* * : (clock, int) -> clock, period*k *)
 fun s2cst_shift (): s2cst    (* shift : (clock, rat) -> clock *)
 fun s2cst_divides (): s2cst  (* | : (int, int) -> bool *)
+
+(*
+** identity tests: overload resolution happens once, in
+** elaboration; every later phase dispatches on the resolved
+** constant, never on the surface name
+*)
+fun s2cst_is_clk (s2c: s2cst): bool
+fun s2cst_is_over (s2c: s2cst): bool
+fun s2cst_is_under (s2c: s2cst): bool
+fun s2cst_is_shift (s2c: s2cst): bool
 
 (*
 ** the built-in term-level operators, as node signatures:
