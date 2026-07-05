@@ -65,7 +65,9 @@ fun print_usage (cmd: string): void =
   println! ("  --dump-ast2        print the resolved, sort-checked program");
   println! ("  --typecheck        typecheck (the default when no stage is given)");
   println! ("  --emit-graph       print the clock-erased dataflow graph (JSON)");
-  println! ("  --codegen[=c|ats]  generate a runnable harness (default: c)");
+  println! ("  --codegen[=c|ats|ats-bare]");
+  println! ("                     generate a runnable harness (default: c;");
+  println! ("                     ats-bare: freestanding ATS2 for bare metal)");
   println! ("other:");
   println! ("  --version          print the version");
   println! ("  --help, -h         this message")
@@ -132,6 +134,7 @@ case+ a of
 | "--codegen" => !(opts.o_cg) := 1
 | "--codegen=c" => !(opts.o_cg) := 1
 | "--codegen=ats" => !(opts.o_cg) := 0
+| "--codegen=ats-bare" => !(opts.o_cg) := 2
 | "--version" => !(opts.o_version) := true
 | _ when (a = "--help") orelse (a = "-h") => !(opts.o_help) := true
 | _ when starts_dash (a) => let

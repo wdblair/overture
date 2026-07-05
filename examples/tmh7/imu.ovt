@@ -1,0 +1,26 @@
+(* the BMI270 gyro (x axis), sampled at 100 Hz over SPI bit-banged
+   in ATS on the sensor's own pins, decimated to a 10 Hz telemetry
+   flow logged in the AXI-SRAM flight recorder. One tick = 1 ms.
+
+   The recorder actuator appends (t, value) pairs; at 100 entries
+   the firmware jumps back into the ROM bootloader, so the host
+   reads the log over DFU with the RAM still warm and the flash
+   untouched:
+
+     dfu-util -a 0 -s 0x24070000:1024:force -U rec.bin
+     make recdump && ./recdump rec.bin
+
+   Both consumers undersample the same fast sensor -- (10,0) /^ 10
+   = (100,0) for telemetry, (10,0) /^ 50 = (500,0) for the LED
+   heartbeat -- no divisibility conditions arise. *)
+
+sensor gyro : rate(int, (10, 0));
+actuator rec : rate(int, (100, 0));
+actuator led : rate(int, (500, 0));
+
+extern node latest {c: clock}
+  (i : rate(int, c)) returns (o : rate(int, c))
+  wcet 1;
+
+rec = latest(gyro /^ 10);
+led = gyro /^ 50;

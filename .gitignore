@@ -15,3 +15,33 @@ ATS-Postiats-contrib/
 tests/*.out
 dist/
 .claude
+
+# firmware build products
+examples/*/[a-z]*_gen.c
+examples/*/[a-z]*_stubs.c
+!examples/*/stubs.c
+examples/*/*.elf
+examples/*/*.bin
+examples/*/[a-z]*_gen.dats
+examples/*/[a-z]*_stubs.dats
+examples/*/overture_sched.*
+examples/*/*.o
+examples/*/[a-z]*_bare.dats
+examples/*/[a-z]*_cells.sats
+examples/*/[a-z]*_cells.cats
+examples/*/overture_sched_bare.*
+
+# codegen outputs land in the invoking directory -- ignore them
+# everywhere, not only under examples/
+*_gen.c
+*_gen.dats
+*_bare.dats
+*_cells.sats
+*_cells.cats
+overture_sched.*
+overture_sched_bare.*
+
+# host tools built in-tree
+examples/tmh7/recdump
+
+examples/*/transcript.out

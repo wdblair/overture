@@ -1,0 +1,28 @@
+(* heartbeat.ovt -- the hardware-in-the-loop program for QEMU
+   (mps2-an500, a Cortex-M7 machine). One tick = 1 ms.
+
+   A fast software counter is sensed on a 10 ms grid and
+   undersampled onto three actuators at different rates:
+
+     fast : (10,0) /^ 10  = (100,0)
+     mid  : (10,0) /^ 50  = (500,0)
+     slow : (10,0) /^ 100 = (1000,0)
+
+   Each actuator prints a line on the emulated UART; the run exits
+   (semihosting) after ten slow beats, and [make hil-qemu] diffs
+   the transcript against heartbeat.expected. Every printed value
+   is a function of logical time only, so the transcript is exact:
+   the schedule itself is the test oracle. *)
+
+sensor counter : rate(int, (10, 0));
+actuator fast : rate(int, (100, 0));
+actuator mid  : rate(int, (500, 0));
+actuator slow : rate(int, (1000, 0));
+
+extern node latest {c: clock}
+  (i : rate(int, c)) returns (o : rate(int, c))
+  wcet 1;
+
+fast = latest(counter /^ 10);
+mid  = latest(counter /^ 50);
+slow = latest(counter /^ 100);
