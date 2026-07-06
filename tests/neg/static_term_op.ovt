@@ -1,0 +1,6 @@
+sensor s : rate(int, (10, 0));
+actuator a : rate(int, (100, 0));
+extern node f {c: clock}
+  (i : rate(int, c)) returns (o : rate(int, c /^ 10))
+  wcet 1;
+a = f(s);

@@ -619,6 +619,19 @@ implement s2cst_divides () = cst_get (the_cst_divides)
 implement s2cst_strict () = cst_get (the_cst_strict)
 implement s2cst_gated () = cst_get (the_cst_gated)
 
+fn cst_is
+  (r: ref(option0(s2cst)), s2c: s2cst): bool =
+(
+  case+ r[] of
+  | Some0 (c0) => s2cst_get_stamp (c0) = s2cst_get_stamp (s2c)
+  | None0 () => false
+) (* end of [cst_is] *)
+
+implement s2cst_is_clk (s2c) = cst_is (the_cst_clk, s2c)
+implement s2cst_is_over (s2c) = cst_is (the_cst_over, s2c)
+implement s2cst_is_under (s2c) = cst_is (the_cst_under, s2c)
+implement s2cst_is_shift (s2c) = cst_is (the_cst_shift, s2c)
+
 (* ****** ****** *)
 
 implement
@@ -723,8 +736,10 @@ val cst_strict = mkcst ("strict", l0 (), S2RTkind ())
 val cst_gated = mkcst ("gated", l0 (), S2RTkind ())
 //
 val cst_clk = mkcst ("clk", l2 (int, rat), clock)
-val cst_over = mkcst ("*^", l2 (clock, int), clock)
-val cst_under = mkcst ("/^", l2 (clock, int), clock)
+(* on clocks the operators are plain arithmetic: oversampling
+   divides the period, undersampling multiplies it *)
+val cst_over = mkcst ("/", l2 (clock, int), clock)
+val cst_under = mkcst ("*", l2 (clock, int), clock)
 val cst_shift = mkcst ("shift", l2 (clock, rat), clock)
 //
 val _period = mkcst ("period", l1 (clock), int)
@@ -824,7 +839,7 @@ val sym_c = symbol_make ("c")
 val sym_k = symbol_make ("k")
 //
 // *^ : {a:type}{c:clock; k:int | k > 0 && k | period(c)}
-//      (rate(a, c), int(k)) -> rate(a, c *^ k)
+//      (rate(a, c), int(k)) -> rate(a, c / k)
 //
 val () = let
   val a = s2var_make (sym_a, S2RTtype ())
@@ -844,7 +859,7 @@ in
 end // end of [val]
 //
 // /^ : {a:type}{c:clock; k:int | k > 0}
-//      (rate(a, c), int(k)) -> rate(a, c /^ k)
+//      (rate(a, c), int(k)) -> rate(a, c * k)
 //
 // undersampling multiplies the period, (n, d) -> (n*k, d), so the
 // lowered clock is integral for any positive k; only oversampling

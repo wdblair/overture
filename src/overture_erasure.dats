@@ -33,7 +33,7 @@ case+ clkopt of
 | Some0 (clk) => (
     case+ clk.s2e_node of
     | S2Eapp (s2c, args)
-        when symbol_get_name (s2cst_get_name (s2c)) = "clk" => (
+        when s2cst_is_clk (s2c) => (
         case+ args of
         | list0_cons (n, list0_cons (p, list0_nil ())) => (
             case+ (n.s2e_node, p.s2e_node) of

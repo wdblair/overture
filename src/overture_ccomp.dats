@@ -124,7 +124,7 @@ case+ s2e.s2e_node of
     case+ args of
     | list0_cons (a1, list0_cons (a2, list0_nil ())) => (
         case+ name of
-        | "clk" => let
+        | _ when s2cst_is_clk (s2c) => let
             val n = eval_int (a1)
             val p = eval_rat (a2)
             val d = (
@@ -138,20 +138,20 @@ case+ s2e.s2e_node of
           in
             @(n, d)
           end
-        | "*^" => let
+        | _ when s2cst_is_over (s2c) => let
             val nd = eval_clk (a1)
             val k = eval_int (a2)
           in
-            if k = 0 then (cgerr ("codegen: oversampling by zero"); @(1, 0))
+            if k = 0 then (cgerr ("codegen: clock division by zero"); @(1, 0))
             else @(nd.0 / k, nd.1)
           end
-        | "/^" => let
+        | _ when s2cst_is_under (s2c) => let
             val nd = eval_clk (a1)
             val k = eval_int (a2)
           in
             @(nd.0 * k, nd.1)
           end
-        | "shift" => let
+        | _ when s2cst_is_shift (s2c) => let
             val nd = eval_clk (a1)
             val k = eval_rat (a2)
             val s = (

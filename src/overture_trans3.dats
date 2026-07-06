@@ -616,8 +616,8 @@ case+ s2e.s2e_node of
     case+ args of
     | list0_cons (c, list0_cons (k, list0_nil ())) => (
         case+ name of
-        | "*^" => let
-            (* oversampling divides the period: (n, d) -> (n/k, d) *)
+        | _ when s2cst_is_over (s2c) => let
+            (* clock division: (n, d) -> (n/k, d) *)
             val prd = mk_app1 (loc, "period", c1, c)
           in
             case+ prd of
@@ -629,15 +629,15 @@ case+ s2e.s2e_node of
               )
             | None0 () => ()
           end
-        | "/^" => (
-            (* undersampling multiplies the period: (n, d) -> (n*k, d);
-               integral for any k > 0, no divisibility required *)
+        | _ when s2cst_is_under (s2c) => (
+            (* clock multiplication: (n, d) -> (n*k, d); integral for
+               any k > 0, no divisibility required *)
             case+ mk_app2 (loc, ">", ii, k, s2exp_int (loc, 0)) of
             | Some0 (g) => c3acc_prop (acc, loc,
-                "positivity for the clock operator [/^]", g)
+                "positivity for the clock operator [*]", g)
             | None0 () => ()
           )
-        | "shift" => let
+        | _ when s2cst_is_shift (s2c) => let
             val prd = mk_app1 (loc, "period", c1, c)
           in
             case+ prd of
@@ -653,7 +653,7 @@ case+ s2e.s2e_node of
               )
             | None0 () => ()
           end
-        | "clk" => (
+        | _ when s2cst_is_clk (s2c) => (
             (* literal clocks were validated in trans12 *)
             case+ (c.s2e_node, k.s2e_node) of
             | (S2Eint _, S2Eint _) => ()
