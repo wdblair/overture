@@ -46,3 +46,10 @@ SOURCES_DATS := \
 include $(PATSHOME)/share/atsmake-post.mk
 
 ###### end of [Makefile] ######
+
+# atsmake's stock rules rebuild X_dats.o only when X.dats changes;
+# a staloaded .sats edit would otherwise leave stale objects (and
+# builds that pass locally but fail from scratch). Over-approximate:
+# every object depends on every interface.
+$(patsubst %.dats,%_dats.o,$(SOURCES_DATS)): $(SOURCES_SATS)
+$(patsubst %.sats,%_sats.o,$(SOURCES_SATS)): $(SOURCES_SATS)

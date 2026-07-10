@@ -113,6 +113,25 @@ else
   echo "FAIL codegen/when (generate/compile/run)"
 fi
 
+# record flows: both backends, byte-identical transcripts
+if codegen_build record_flow && "$gendir/record_flow" 1000 > "$gendir/record_flow.out" \
+   && codegen_build_c record_flow \
+   && "$gendir/record_flow_c" 1000 > "$gendir/record_flow_c.out"; then
+  if grep -q '^\[t=0\] rec = {3, 4, 5}$' "$gendir/record_flow.out" \
+     && grep -q '^\[t=100\] rec = {303, 304, 305}$' "$gendir/record_flow.out" \
+     && grep -q '^\[t=0\] led = 3$' "$gendir/record_flow.out" \
+     && diff -q "$gendir/record_flow.out" "$gendir/record_flow_c.out" > /dev/null; then
+    pass=$((pass + 1))
+  else
+    fail=$((fail + 1))
+    echo "FAIL codegen/record_flow (bad transcript or backend divergence)"
+    diff "$gendir/record_flow.out" "$gendir/record_flow_c.out" | sed 's/^/  | /'
+  fi
+else
+  fail=$((fail + 1))
+  echo "FAIL codegen/record_flow (generate/compile/run)"
+fi
+
 # ---- the schedule certificate rejects infeasible task sets ----
 #
 # sched_infeasible typechecks in Overture (each task alone fits its

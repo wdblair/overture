@@ -1,0 +1,17 @@
+abstype vec3;
+typedef vec3 = { x : int, y : int, z : int };
+
+sensor gyro : rate(vec3, (10, 0));
+actuator rec : rate(vec3, (100, 0));
+actuator led : rate(int, (500, 0));
+
+extern node latest {a: type}{c: clock}
+  (i : rate(a, c)) returns (o : rate(a, c))
+  wcet 1;
+
+extern node magnitude {c: clock}
+  (i : rate(vec3, c)) returns (o : rate(int, c))
+  wcet 1;
+
+rec = latest(gyro /^ 10);
+led = magnitude(gyro) /^ 50;

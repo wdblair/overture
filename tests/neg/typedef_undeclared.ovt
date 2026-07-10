@@ -1,0 +1,4 @@
+typedef vec2 = { x : int, y : int };
+sensor s : rate(int, (10, 0));
+actuator a : rate(int, (10, 0));
+a = s;

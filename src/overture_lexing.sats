@@ -47,6 +47,8 @@ datatype tnode =
 | TOKkw_infixr of ()
 | TOKkw_prefix of ()
 | TOKkw_wcet of ()
+| TOKkw_abstype of ()
+| TOKkw_typedef of ()
 //
 | TOKlparen of () | TOKrparen of ()
 | TOKlbrace of () | TOKrbrace of ()

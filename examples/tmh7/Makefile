@@ -128,7 +128,7 @@ flash: blink.bin
 # ---- imu.ovt: BMI270 gyro + AXI flight recorder, ATS harness;
 # ---- the run ends in the ROM bootloader, then (:force lets
 # ---- dfu-util read outside the alt's flash-only memory map):
-# ----   dfu-util -a 0 -s 0x24070000:1024:force -U rec.bin
+# ----   dfu-util -a 0 -s 0x24070000:2048:force -U rec.bin
 # ----   make recdump && ./recdump rec.bin
 
 recdump: recdump.dats
@@ -187,7 +187,7 @@ hil: imu-ats.bin recdump
 	@echo "hil: flying -- 10 s of recording, 1 Hz LED heartbeat"
 	sleep 20
 	rm -f rec.bin
-	$(DFU) -a 0 -s 0x24070000:1024:force -U rec.bin
+	$(DFU) -a 0 -s 0x24070000:2048:force -U rec.bin
 	./recdump rec.bin
 
 clean:

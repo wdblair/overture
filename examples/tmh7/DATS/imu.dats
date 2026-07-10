@@ -104,20 +104,30 @@ in
   v
 end // end of [bmi_read]
 
-(* a 16-bit little-endian read (data registers), sign-extended *)
-fn bmi_read16 (reg: uint): int = let
-  val () = imu_mmio_write (GPIOA_BSRR, CS_LO)
-  val () = imu_delay (HALF_BIT)
-  val _ = spi_xfer (reg lor 0x80u)
-  val _ = spi_xfer (0u)
-  val lo = spi_xfer (0u)
-  val hi = spi_xfer (0u)
-  val () = imu_delay (HALF_BIT)
-  val () = imu_mmio_write (GPIOA_BSRR, CS_HI)
+(* sign-extend a little-endian 16-bit pair *)
+fn sx16 (lo: int, hi: int): int = let
   val v = hi * 256 + lo
 in
   if v >= 32768 then v - 65536 else v
-end // end of [bmi_read16]
+end // end of [sx16]
+
+(* one burst over GYR_X..GYR_Z (0x12..0x17): six data bytes *)
+fn bmi_read_gyr (v: &vec3? >> vec3): void = let
+  val () = imu_mmio_write (GPIOA_BSRR, CS_LO)
+  val () = imu_delay (HALF_BIT)
+  val _ = spi_xfer (0x12u lor 0x80u)
+  val _ = spi_xfer (0u) (* dummy *)
+  val xl = spi_xfer (0u)
+  val xh = spi_xfer (0u)
+  val yl = spi_xfer (0u)
+  val yh = spi_xfer (0u)
+  val zl = spi_xfer (0u)
+  val zh = spi_xfer (0u)
+  val () = imu_delay (HALF_BIT)
+  val () = imu_mmio_write (GPIOA_BSRR, CS_HI)
+in
+  v := @{x= sx16 (xl, xh), y= sx16 (yl, yh), z= sx16 (zl, zh)}
+end // end of [bmi_read_gyr]
 
 fn bmi_write (reg: uint, v: uint): void = let
   val () = imu_mmio_write (GPIOA_BSRR, CS_LO)
@@ -222,14 +232,23 @@ end // end of [fw_init]
 
 (* ****** ****** *)
 
-(* GYR_X, 16-bit signed at 0x12; +-2000 dps is 16.4 LSB/dps *)
-implement gyro_sense (t) = bmi_read16 (0x12u)
+(* all three axes in one burst; +-2000 dps is 16.4 LSB/dps *)
+implement gyro_sense (t, v) = bmi_read_gyr (v)
 
-implement latest (a0) = a0
+implement latest (i, r0) = r0 := i
+
+(* manhattan magnitude: cheap, monotone, sign-free *)
+implement magnitude (i) = let
+  val ax = (if i.x < 0 then ~(i.x) else i.x): int
+  val ay = (if i.y < 0 then ~(i.y) else i.y): int
+  val az = (if i.z < 0 then ~(i.z) else i.z): int
+in
+  ax + ay + az
+end // end of [magnitude]
 
 (*
-** append (t, value); the 100th record ends the run by re-entering
-** the ROM bootloader -- the actuator lands the flight
+** append (t, x, y, z); the 100th record ends the run by
+** re-entering the ROM bootloader -- the actuator lands the flight
 *)
 implement rec_actuate (t, v) = let
   val n = g0uint2int_uint_int (imu_mmio_read (REC_COUNT))
@@ -237,8 +256,10 @@ in
   if n >= REC_LIMIT then () else let
     val a = imu_mmio_read (REC_NEXT)
     val () = imu_mmio_write (a, g0int2uint_int_uint (t))
-    val () = imu_mmio_write (a + 4u, g0int2uint_int_uint (v))
-    val () = imu_mmio_write (REC_NEXT, a + 8u)
+    val () = imu_mmio_write (a + 4u, g0int2uint_int_uint (v.x))
+    val () = imu_mmio_write (a + 8u, g0int2uint_int_uint (v.y))
+    val () = imu_mmio_write (a + 12u, g0int2uint_int_uint (v.z))
+    val () = imu_mmio_write (REC_NEXT, a + 16u)
     val n1 = n + 1
     val () = imu_mmio_write (REC_COUNT, g0int2uint_int_uint (n1))
   in

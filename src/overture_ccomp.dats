@@ -188,8 +188,114 @@ case+ s2e.s2e_node of
 //
 // cells, buffers, actions
 //
+(*
+** the payload of a flow, as codegen sees it: a scalar, or a
+** record named by its abstype (fields from the trans12 registry)
+*)
+datatype cpay =
+| CPint of () | CPbool of () | CPrec of symbol
+
+fn cpay_isbool (p: cpay): bool =
+  case+ p of CPbool () => true | _ (*rest*) => false
+fn cpay_isrec (p: cpay): bool =
+  case+ p of CPrec _ => true | _ (*rest*) => false
+fn cpay_recname (p: cpay): string =
+  case+ p of CPrec (s) => symbol_get_name (s) | _ (*rest*) => ""
+
+
+(* every typedef'd abstype, as ATS and as C *)
+fn emit_typedefs_ats (out: FILEref): void = let
+  fun one (fs: list0(@(symbol, bool)), fst: bool): void =
+    case+ fs of
+    | list0_nil () => ()
+    | list0_cons (f, fs) => let
+        val () = if not (fst) then fprint! (out, ", ")
+        val () = fprint! (out, symbol_get_name (f.0), "= ",
+          (if f.1 then "bool" else "int"): string)
+      in
+        one (fs, false)
+      end
+  fun loop (ds: list0(@(symbol, list0(@(symbol, bool))))): void =
+    case+ ds of
+    | list0_nil () => ()
+    | list0_cons (d, ds) => let
+        val () = fprint! (out, "typedef ", symbol_get_name (d.0), " = @{")
+        val () = one (d.1, true)
+        val () = fprint! (out, "}\n")
+      in
+        loop (ds)
+      end
+in
+  loop (abstype_defs ())
+end // end of [emit_typedefs_ats]
+
+fn emit_typedefs_c (out: FILEref): void = let
+  fun one (fs: list0(@(symbol, bool))): void =
+    case+ fs of
+    | list0_nil () => ()
+    | list0_cons (f, fs) => let
+        val () = fprint! (out,
+          (if f.1 then "bool " else "int "): string,
+          symbol_get_name (f.0), "; ")
+      in
+        one (fs)
+      end
+  fun loop (ds: list0(@(symbol, list0(@(symbol, bool))))): void =
+    case+ ds of
+    | list0_nil () => ()
+    | list0_cons (d, ds) => let
+        val () = fprint! (out, "typedef struct { ")
+        val () = one (d.1)
+        val () = fprint! (out, "} ", symbol_get_name (d.0), ";\n")
+      in
+        loop (ds)
+      end
+in
+  loop (abstype_defs ())
+end // end of [emit_typedefs_c]
+
+fn ctystr (p: cpay): string =
+  case+ p of
+  | CPbool () => "bool" | CPint () => "int"
+  | CPrec (s) => symbol_get_name (s)
+
+(* the record fields of a payload, from the trans12 registry *)
+fn abst_fields
+  (p: cpay): list0(@(symbol, bool)) =
+  case+ p of
+  | CPrec (s) => (
+      case+ abstype_fields (s) of
+      | Some0 (fs) => fs
+      | None0 () => let
+          val () = cgerr (str3 ("codegen: abstype [", symbol_get_name (s),
+            "] has no typedef; C-defined storage is not supported yet"))
+        in
+          list0_nil ()
+        end
+    )
+  | _ (*rest*) => list0_nil ()
+
+(* a zeroed record literal, ATS spelling: @{x= 0, y= false} *)
+fn emit_rec_zero_ats
+  (out: FILEref, p: cpay): void = let
+  val () = fprint! (out, "@{")
+  fun loop (fs: list0(@(symbol, bool)), fst: bool): void =
+    case+ fs of
+    | list0_nil () => ()
+    | list0_cons (f, fs) => let
+        val () = if not (fst) then fprint! (out, ", ")
+        val () = fprint! (out, symbol_get_name (f.0), "= ",
+          (if f.1 then "false" else "0"): string)
+      in
+        loop (fs, false)
+      end
+  val () = loop (abst_fields (p), true)
+in
+  fprint! (out, "}")
+end // end of [emit_rec_zero_ats]
+
 typedef cell = '{
-  c_id= int, c_bool= bool, c_n= int, c_d= int
+  c_id= int, c_pay= cpay, c_n= int, c_d= int
 } (* end of [cell] *)
 
 datatype fval =
@@ -199,8 +305,32 @@ datatype fval =
 | FVrat of (int, int)
 
 typedef buf = '{
-  b_id= int, b_bool= bool, b_depth= int
+  b_id= int, b_pay= cpay, b_depth= int
 } (* end of [buf] *)
+
+fn fval_pay (fv: fval): cpay =
+  case+ fv of
+  | FVcell (c) => c.c_pay
+  | FVgated (v, _) => v.c_pay
+  | _ (*rest*) => CPint ()
+
+fun pays_anyrec (ps: list0(cpay)): bool =
+  case+ ps of
+  | list0_nil () => false
+  | list0_cons (p, ps) =>
+      if cpay_isrec (p) then true else pays_anyrec (ps)
+
+fun fvals_anyrec (fvs: list0(fval)): bool =
+  case+ fvs of
+  | list0_nil () => false
+  | list0_cons (fv, fvs) =>
+      if cpay_isrec (fval_pay (fv)) then true else fvals_anyrec (fvs)
+
+fun cells_anyrec (cs: list0(cell)): bool =
+  case+ cs of
+  | list0_nil () => false
+  | list0_cons (c, cs) =>
+      if cpay_isrec (c.c_pay) then true else cells_anyrec (cs)
 
 datatype action =
 | ACTsense of (string, cell)
@@ -216,7 +346,7 @@ datatype action =
 | ACTactuate_gated of (string, cell(*value*), cell(*presence*))
 // end of [action]
 
-typedef payenv = list0 (@(int(*tyvar stamp*), bool))
+typedef payenv = list0 (@(int(*tyvar stamp*), cpay))
 
 typedef
 ccctx = '{
@@ -227,9 +357,9 @@ ccctx = '{
 , x_pre= ref (list0(action))   (* reversed; senses + fby emits *)
 , x_strict= ref (list0(action))
 , x_post= ref (list0(action))  (* fby stores *)
-, x_senses= ref (list0(@(string, bool)))
-, x_acts= ref (list0(@(string, bool)))
-, x_calls= ref (list0(@(string, list0(bool)(*args*), list0(bool)(*outs*))))
+, x_senses= ref (list0(@(string, cpay)))
+, x_acts= ref (list0(@(string, cpay)))
+, x_calls= ref (list0(@(string, list0(cpay)(*args*), list0(cpay)(*outs*))))
 , x_tasks= ref (list0(@(string, int(*n*), int(*d*), int(*wcet*))))
 , x_nodes= list0 (n2ode)
 } (* end of [ccctx] *)
@@ -243,9 +373,9 @@ fn ctx_new
 , x_pre= ref<list0(action)> (list0_nil ())
 , x_strict= ref<list0(action)> (list0_nil ())
 , x_post= ref<list0(action)> (list0_nil ())
-, x_senses= ref<list0(@(string, bool))> (list0_nil ())
-, x_acts= ref<list0(@(string, bool))> (list0_nil ())
-, x_calls= ref<list0(@(string, list0(bool), list0(bool)))> (list0_nil ())
+, x_senses= ref<list0(@(string, cpay))> (list0_nil ())
+, x_acts= ref<list0(@(string, cpay))> (list0_nil ())
+, x_calls= ref<list0(@(string, list0(cpay), list0(cpay)))> (list0_nil ())
 , x_tasks= ref<list0(@(string, int, int, int))> (list0_nil ())
 , x_nodes= nodes
 } (* end of [ctx_new] *)
@@ -259,8 +389,8 @@ in
 end // end of [ctx_id]
 
 fn cell_new
-  (ctx: ccctx, isbool: bool, n: int, d: int): cell = let
-  val c = '{ c_id= ctx_id (ctx), c_bool= isbool, c_n= n, c_d= d } : cell
+  (ctx: ccctx, pay: cpay, n: int, d: int): cell = let
+  val c = '{ c_id= ctx_id (ctx), c_pay= pay, c_n= n, c_d= d } : cell
   val r = ctx.x_cells
   val () = !r := list0_cons (c, !r)
 in
@@ -268,8 +398,10 @@ in
 end // end of [cell_new]
 
 fn state_new
-  (ctx: ccctx, isbool: bool): cell = let
-  val c = '{ c_id= ctx_id (ctx), c_bool= isbool, c_n= 1, c_d= 0 } : cell
+  (ctx: ccctx, pay: cpay): cell = let
+  val () = if cpay_isrec (pay) then cgerr
+    ("codegen: fby/current registers over record flows are not yet supported")
+  val c = '{ c_id= ctx_id (ctx), c_pay= pay, c_n= 1, c_d= 0 } : cell
   val r = ctx.x_states
   val () = !r := list0_cons (c, !r)
 in
@@ -277,8 +409,10 @@ in
 end // end of [state_new]
 
 fn buf_new
-  (ctx: ccctx, isbool: bool, depth: int): buf = let
-  val b = '{ b_id= ctx_id (ctx), b_bool= isbool, b_depth= depth } : buf
+  (ctx: ccctx, pay: cpay, depth: int): buf = let
+  val () = if cpay_isrec (pay) then cgerr
+    ("codegen: delay lines over record flows are not yet supported")
+  val b = '{ b_id= ctx_id (ctx), b_pay= pay, b_depth= depth } : buf
   val r = ctx.x_bufs
   val () = !r := list0_cons (b, !r)
 in
@@ -297,24 +431,29 @@ fn emit_post (ctx: ccctx, a: action): void =
 // payload resolution
 //
 fn pay_find
-  (pe: payenv, stamp: int): bool = let
-  fun loop (pe: payenv): bool =
+  (pe: payenv, stamp: int): cpay = let
+  fun loop (pe: payenv): cpay =
     case+ pe of
-    | list0_nil () => false (* default int *)
+    | list0_nil () => CPint () (* default *)
     | list0_cons (kx, pe) =>
         if kx.0 = stamp then kx.1 else loop (pe)
 in
   loop (pe)
 end // end of [pay_find]
 
-fn t2ype_isbool
-  (t2p: t2ype, pe: payenv): bool =
+fn t2ype_cpay
+  (t2p: t2ype, pe: payenv): cpay =
 (
   case+ t2p of
-  | T2YPEbase (sym) => symbol_get_name (sym) = "bool"
+  | T2YPEbase (sym) => (
+      case+ symbol_get_name (sym) of
+      | "bool" => CPbool ()
+      | "int" => CPint ()
+      | _ (*rest*) => CPrec (sym)
+    )
   | T2YPEvar (s2v) => pay_find (pe, s2var_get_stamp (s2v))
-  | _ (*rest*) => false
-) (* end of [t2ype_isbool] *)
+  | _ (*rest*) => CPint ()
+) (* end of [t2ype_cpay] *)
 
 (*
 ** evaluate a ground kind index: true iff gated
@@ -349,7 +488,7 @@ fn fval_presence
 (
   case+ fv of
   | FVgated (_, p) => p
-  | _ (*rest*) => '{ c_id= 0, c_bool= true, c_n= 1, c_d= 0 }
+  | _ (*rest*) => '{ c_id= 0, c_pay= CPbool (), c_n= 1, c_d= 0 }
 ) (* end of [fval_presence] *)
 
 fn fval_cell
@@ -360,7 +499,7 @@ fn fval_cell
   | _ (*rest*) => let
       val () = cgerr (str3 ("codegen: expected a flow value in ", what, ""))
     in
-      '{ c_id= 0, c_bool= false, c_n= 1, c_d= 0 }
+      '{ c_id= 0, c_pay= CPint (), c_n= 1, c_d= 0 }
     end
 ) (* end of [fval_cell] *)
 
@@ -431,7 +570,7 @@ case+ (prms, fvs) of
         val pe = (
           case+ pelt of
           | T2YPEvar (tv) =>
-              list0_cons (@(s2var_get_stamp (tv), c.c_bool), pe)
+              list0_cons (@(s2var_get_stamp (tv), c.c_pay), pe)
           | _ (*rest*) => pe
         ) : payenv
       in
@@ -627,8 +766,8 @@ fn delay_line
   ctx: ccctx, inc: cell, s: int
 ) : cell = let
   val depth = s / inc.c_n + 1
-  val b = buf_new (ctx, inc.c_bool, depth)
-  val out = cell_new (ctx, inc.c_bool, inc.c_n, inc.c_d + s)
+  val b = buf_new (ctx, inc.c_pay, depth)
+  val out = cell_new (ctx, inc.c_pay, inc.c_n, inc.c_d + s)
   val () = emit_strict (ctx, ACTbufwrite (inc, b))
   val () = emit_strict (ctx, ACTbufread (b, out))
 in
@@ -697,7 +836,7 @@ case+ name of
     | list0_cons (f, list0_cons (FVint (k), list0_nil ())) => let
         val c = fval_cell (f, name)
         val n2 = (if name = "*^" then c.c_n / k else c.c_n * k): int
-        val out = cell_new (ctx, c.c_bool, n2, c.c_d)
+        val out = cell_new (ctx, c.c_pay, n2, c.c_d)
         val () = emit_strict (ctx, ACTcopy (FVcell (c), out))
       in
         list0_cons (FVcell (out), list0_nil ())
@@ -753,8 +892,8 @@ case+ name of
     case+ fvs of
     | list0_cons (FVint (v0), list0_cons (f, list0_nil ())) => let
         val c = fval_cell (f, "fby")
-        val st = state_new (ctx, c.c_bool)
-        val out = cell_new (ctx, c.c_bool, c.c_n, c.c_d)
+        val st = state_new (ctx, c.c_pay)
+        val out = cell_new (ctx, c.c_pay, c.c_n, c.c_d)
         val () = emit_pre (ctx, ACTfbyemit (v0, st, out))
         val () = emit_post (ctx, ACTfbystore (c, st))
       in
@@ -771,7 +910,7 @@ case+ name of
     case+ fvs of
     | list0_cons (FVint (v0), list0_cons (f, list0_nil ())) => let
         val c = fval_cell (f, "cons")
-        val out = cell_new (ctx, c.c_bool, c.c_n, c.c_d - c.c_n)
+        val out = cell_new (ctx, c.c_pay, c.c_n, c.c_d - c.c_n)
         val () = emit_strict (ctx, ACTconsemit (v0, c, out))
       in
         list0_cons (FVcell (out), list0_nil ())
@@ -789,8 +928,8 @@ case+ name of
     | list0_cons (f, list0_cons (b, list0_nil ())) => let
         val cf = fval_cell (f, "when")
         val cb = fval_cell (b, "when")
-        val vout = cell_new (ctx, cf.c_bool, cf.c_n, cf.c_d)
-        val pout = cell_new (ctx, true(*bool*), cf.c_n, cf.c_d)
+        val vout = cell_new (ctx, cf.c_pay, cf.c_n, cf.c_d)
+        val pout = cell_new (ctx, CPbool (), cf.c_n, cf.c_d)
         val () = emit_strict (ctx, ACTcopy (FVcell (cf), vout))
         val () = emit_strict (ctx, ACTcopy (FVcell (cb), pout))
       in
@@ -809,7 +948,7 @@ case+ name of
     | list0_cons (FVint (v0), list0_cons (g, list0_nil ())) => (
         case+ g of
         | FVgated (v, p) => let
-            val out = cell_new (ctx, v.c_bool, v.c_n, v.c_d)
+            val out = cell_new (ctx, v.c_pay, v.c_n, v.c_d)
             val () = emit_strict (ctx, ACTcurrent (v0, v, p, out))
           in
             list0_cons (FVcell (out), list0_nil ())
@@ -832,7 +971,7 @@ case+ name of
     | list0_cons (b, list0_cons (x, list0_cons (y, list0_nil ()))) => let
         val cb = fval_cell (b, "merge")
         val cx = fval_cell (x, "merge")
-        val out = cell_new (ctx, cx.c_bool, cx.c_n, cx.c_d)
+        val out = cell_new (ctx, cx.c_pay, cx.c_n, cx.c_d)
         (* out := if b then x else y, at the common clock *)
         val () = emit_strict (ctx, ACTcall ("%merge",
           list0_cons (FVcell (cb),
@@ -888,17 +1027,17 @@ fun outcells
                 ("codegen: gated flows on extern node [", name,
                  "] are not supported yet"))
             in
-              cell_new (ctx, false, 1, 0)
+              cell_new (ctx, CPint (), 1, 0)
             end else let
               val nd = eval_clk (clk)
             in
-              cell_new (ctx, t2ype_isbool (elt, bp.1), nd.0, nd.1)
+              cell_new (ctx, t2ype_cpay (elt, bp.1), nd.0, nd.1)
             end
         | _ (*rest*) => let
             val () = cgerr (str3
               ("codegen: extern node [", name, "] must return flows"))
           in
-            cell_new (ctx, false, 1, 0)
+            cell_new (ctx, CPint (), 1, 0)
           end
       ) : cell
     in
@@ -946,24 +1085,22 @@ val () = (
 // record the extern declaration (deduplicated)
 //
 fun argbools
-  (fvs: list0(fval)): list0 (bool) =
+  (fvs: list0(fval)): list0 (cpay) =
   case+ fvs of
   | list0_nil () => list0_nil ()
   | list0_cons (fv, fvs) => let
-      val b = (
-        case+ fv of FVcell (c) => c.c_bool | _ => false
-      ) : bool
+      val b = fval_pay (fv)
     in
       list0_cons (b, argbools (fvs))
     end
 fun outbools
-  (cs: list0(cell)): list0 (bool) =
+  (cs: list0(cell)): list0 (cpay) =
   case+ cs of
   | list0_nil () => list0_nil ()
-  | list0_cons (c, cs) => list0_cons (c.c_bool, outbools (cs))
+  | list0_cons (c, cs) => list0_cons (c.c_pay, outbools (cs))
 val r = ctx.x_calls
 fun seen
-  (xs: list0(@(string, list0(bool), list0(bool)))): bool =
+  (xs: list0(@(string, list0(cpay), list0(cpay)))): bool =
   case+ xs of
   | list0_nil () => false
   | list0_cons (x, xs) => if x.0 = name then true else seen (xs)
@@ -1007,17 +1144,17 @@ fun mkcells
         case+ t2p of
         | T2YPErate (knd, elt, clk) => let
             val nd = eval_clk (clk)
-            val v = cell_new (ctx, t2ype_isbool (elt, bp.1), nd.0, nd.1)
+            val v = cell_new (ctx, t2ype_cpay (elt, bp.1), nd.0, nd.1)
           in
             if eval_gated (knd) then
-              FVgated (v, cell_new (ctx, true(*bool*), nd.0, nd.1))
+              FVgated (v, cell_new (ctx, CPbool (), nd.0, nd.1))
             else FVcell (v)
           end
         | _ (*rest*) => let
             val () = cgerr (str3
               ("codegen: flow of node [", name, "] must carry a rate type"))
           in
-            FVcell (cell_new (ctx, false, 1, 0))
+            FVcell (cell_new (ctx, CPint (), 1, 0))
           end
       ) : fval
       val r = mkcells (d2vs, env)
@@ -1153,7 +1290,13 @@ case+ a of
 | ACTsense (name, c) => let
     val () = emit_fire (out, c.c_n, c.c_d)
   in
-    fprint! (out, "!c", c.c_id, " := ", name, "_sense (t)")
+    if cpay_isrec (c.c_pay) then let
+      val ty = ctystr (c.c_pay)
+      val () = fprint! (out,
+        "let var v: ", ty, " in (", name, "_sense (t, v); ",
+        "!c", c.c_id, " := v) end")
+    in end
+    else fprint! (out, "!c", c.c_id, " := ", name, "_sense (t)")
   end
 //
 | ACTcall (name, args, outs) => (
@@ -1176,6 +1319,52 @@ case+ a of
       )
     | _ (*extern call*) => (
         case+ outs of
+        | list0_cons (o0, list0_nil ())
+            when fvals_anyrec (args) orelse cpay_isrec (o0.c_pay) => let
+            (* records travel by reference through var temporaries *)
+            val () = emit_fire (out, o0.c_n, o0.c_d)
+            val () = fprint! (out, "let ")
+            val _ = list0_iforeach<fval> (args
+            , lam (i, fv) =<cloref1> let
+                val p = fval_pay (fv)
+              in
+                if cpay_isrec (p) then let
+                  val c = fval_cell (fv, name)
+                in
+                  fprint! (out, "var a", i, ": ", ctystr (p),
+                    " = !c", c.c_id, "; ")
+                end
+              end
+            ) (* end of [iforeach] *)
+            val orec = cpay_isrec (o0.c_pay)
+            val () = if orec
+              then fprint! (out, "var rr: ", ctystr (o0.c_pay), "; ")
+            val () = fprint! (out, "in ")
+            val () = if orec then fprint! (out, "(")
+              else fprint! (out, "!c", o0.c_id, " := ")
+            val () = fprint! (out, name, " (")
+            val _ = list0_iforeach<fval> (args
+            , lam (i, fv) =<cloref1> let
+                val () = if i > 0 then fprint! (out, ", ")
+              in
+                if cpay_isrec (fval_pay (fv))
+                  then fprint! (out, "a", i)
+                  else emit_fval (out, fv)
+              end
+            ) (* end of [iforeach] *)
+            val () =
+              if orec then let
+                val () = (
+                  case+ args of
+                  | list0_nil () => () | list0_cons _ => fprint! (out, ", ")
+                ) : void
+              in
+                fprint! (out, "rr); !c", o0.c_id, " := rr)")
+              end
+              else fprint! (out, ")")
+          in
+            fprint! (out, " end")
+          end
         | list0_cons (o0, list0_nil ()) => let
             val () = emit_fire (out, o0.c_n, o0.c_d)
             val () = fprint! (out, "!c", o0.c_id, " := ", name, " (")
@@ -1192,6 +1381,10 @@ case+ a of
           in
             fprint! (out, ")")
           end
+        | list0_cons (o0, _)
+            when fvals_anyrec (args) orelse cells_anyrec (outs) =>
+            cgerr (str3 ("codegen: record flows through multi-output",
+              " extern node [", name))
         | list0_cons (o0, _) => let
             val () = emit_fire (out, o0.c_n, o0.c_d)
             val () = fprint! (out, "let val (")
@@ -1297,7 +1490,12 @@ case+ a of
 | ACTactuate (name, c) => let
     val () = emit_fire (out, c.c_n, c.c_d)
   in
-    fprint! (out, name, "_actuate (t, !c", c.c_id, ")")
+    if cpay_isrec (c.c_pay) then let
+      val () = fprint! (out,
+        "let var v: ", ctystr (c.c_pay), " = !c", c.c_id,
+        " in ", name, "_actuate (t, v) end")
+    in end
+    else fprint! (out, name, "_actuate (t, !c", c.c_id, ")")
   end
 //
 | ACTactuate_gated (name, v, p) => let
@@ -1332,63 +1530,79 @@ end // end of [emit_actions]
 fn emit_externs
   (out: FILEref, ctx: ccctx): void = let
 //
-fn tystr (b: bool): string = if b then "bool" else "int"
-//
 fun senses
-  (xs: list0(@(string, bool))): void =
+  (xs: list0(@(string, cpay))): void =
   case+ xs of
   | list0_nil () => ()
   | list0_cons (x, xs) => let
-      val () = fprint! (out,
-        "extern fun ", x.0, "_sense (t: int): ", tystr (x.1),
-        " = \"ext#", x.0, "_sense\"\n")
+      val () =
+        if cpay_isrec (x.1)
+          then fprint! (out,
+            "extern fun ", x.0, "_sense (t: int, v: &", ctystr (x.1),
+            "? >> ", ctystr (x.1), "): void = \"ext#", x.0, "_sense\"\n")
+          else fprint! (out,
+            "extern fun ", x.0, "_sense (t: int): ", ctystr (x.1),
+            " = \"ext#", x.0, "_sense\"\n")
     in
       senses (xs)
     end
 val () = senses (list0_reverse (!(ctx.x_senses)))
 //
 fun acts
-  (xs: list0(@(string, bool))): void =
+  (xs: list0(@(string, cpay))): void =
   case+ xs of
   | list0_nil () => ()
   | list0_cons (x, xs) => let
-      val () = fprint! (out,
-        "extern fun ", x.0, "_actuate (t: int, v: ", tystr (x.1),
-        "): void = \"ext#", x.0, "_actuate\"\n")
+      val () =
+        if cpay_isrec (x.1)
+          then fprint! (out,
+            "extern fun ", x.0, "_actuate (t: int, v: &", ctystr (x.1),
+            "): void = \"ext#", x.0, "_actuate\"\n")
+          else fprint! (out,
+            "extern fun ", x.0, "_actuate (t: int, v: ", ctystr (x.1),
+            "): void = \"ext#", x.0, "_actuate\"\n")
     in
       acts (xs)
     end
 val () = acts (list0_reverse (!(ctx.x_acts)))
 //
 fun calls
-  (xs: list0(@(string, list0(bool), list0(bool)))): void =
+  (xs: list0(@(string, list0(cpay), list0(cpay)))): void =
   case+ xs of
   | list0_nil () => ()
   | list0_cons (x, xs) => let
       val () = fprint! (out, "extern fun ", x.0, " (")
-      fun args (bs: list0(bool), i: int): void =
+      fun args (bs: list0(cpay), i: int): int =
         case+ bs of
-        | list0_nil () => ()
+        | list0_nil () => i
         | list0_cons (b, bs) => let
             val () = if i > 0 then fprint! (out, ", ")
-            val () = fprint! (out, "a", i, ": ", tystr (b))
+            val () =
+              if cpay_isrec (b)
+                then fprint! (out, "a", i, ": &", ctystr (b))
+                else fprint! (out, "a", i, ": ", ctystr (b))
           in
             args (bs, i + 1)
           end
-      val () = args (x.1, 0)
-      val () = fprint! (out, "): ")
-      val nouts = list0_length (x.2)
+      val n = args (x.1, 0)
       val () = (
         case+ x.2 of
-        | list0_cons (b, list0_nil ()) => fprint! (out, tystr (b))
-        | _ (*tuple*) => let
-            val () = fprint! (out, "(")
-            fun outs (bs: list0(bool), i: int): void =
+        | list0_cons (b, list0_nil ()) =>
+            if cpay_isrec (b) then let
+              val () = if n > 0 then fprint! (out, ", ")
+            in
+              fprint! (out, "r0: &", ctystr (b), "? >> ", ctystr (b),
+                "): void")
+            end
+            else fprint! (out, "): ", ctystr (b))
+        | _ (*tuple: scalars only, records rejected at emit *) => let
+            val () = fprint! (out, "): (")
+            fun outs (bs: list0(cpay), i: int): void =
               case+ bs of
               | list0_nil () => ()
               | list0_cons (b, bs) => let
                   val () = if i > 0 then fprint! (out, ", ")
-                  val () = fprint! (out, tystr (b))
+                  val () = fprint! (out, ctystr (b))
                 in
                   outs (bs, i + 1)
                 end
@@ -1566,6 +1780,8 @@ val () = fprint! (out,
   "** logical-time harness; do not edit\n*)\n\n")
 val () = fprint! (out, "#include \"share/atspre_staload.hats\"\n\n")
 val () = fprint! (out, "staload \"./overture_sched.sats\"\n\n")
+val () = emit_typedefs_ats (out)
+val () = fprint! (out, "\n")
 //
 val () = emit_externs (out, ctx)
 val () = fprint! (out, "\n")
@@ -1576,10 +1792,18 @@ fun cells (cs: list0(cell)): void =
   case+ cs of
   | list0_nil () => ()
   | list0_cons (c, cs) => let
-      val () =
-        if c.c_bool
-          then fprint! (out, "val c", c.c_id, " = ref<bool> (false)\n")
-          else fprint! (out, "val c", c.c_id, " = ref<int> (0)\n")
+      val () = (
+        case+ c.c_pay of
+        | CPbool () => fprint! (out, "val c", c.c_id, " = ref<bool> (false)\n")
+        | CPint () => fprint! (out, "val c", c.c_id, " = ref<int> (0)\n")
+        | CPrec (s) => let
+            val () = fprint! (out,
+              "val c", c.c_id, " = ref<", symbol_get_name (s), "> (")
+            val () = emit_rec_zero_ats (out, c.c_pay)
+          in
+            fprint! (out, ")\n")
+          end
+      ) : void
     in
       cells (cs)
     end
@@ -1590,8 +1814,8 @@ fun bufs (bs: list0(buf)): void =
   case+ bs of
   | list0_nil () => ()
   | list0_cons (b, bs) => let
-      val ty = (if b.b_bool then "bool" else "int"): string
-      val v0 = (if b.b_bool then "false" else "0"): string
+      val ty = ctystr (b.b_pay)
+      val v0 = (if cpay_isbool (b.b_pay) then "false" else "0"): string
       val () = fprint! (out,
         "val b", b.b_id, " = arrszref_make_elt<", ty, "> (i2sz(",
         b.b_depth, "), ", v0, ")\n")
@@ -1658,6 +1882,20 @@ end // end of [emit_gen]
 
 (* ****** ****** *)
 
+(*
+** emit_stubs: deterministic PLACEHOLDER implementations of the
+** program's external surface, so generated programs run headless
+** on the host (the test suite; never the firmware, which links
+** real drivers instead). The lies are fixed:
+**   sensors   -- int: t; bool: true every third tick (3 is coprime
+**                to the goldens' even fire-date grids, so gates
+**                alternate; mod 2 would be constantly true there);
+**                record fields: t + k, staggered by field index
+**   actuators -- print one transcript line per firing
+**   nodes     -- every output is the sum of the inputs (+ index)
+** These bodies MUST match emit_protos_c's [defn] bodies byte for
+** byte in behavior: the suite diffs the two backends' transcripts.
+*)
 fn emit_stubs
 (
   out: FILEref, ctx: ccctx, base: string
@@ -1669,65 +1907,136 @@ val () = fprint! (out,
 val () = fprint! (out, "#define ATS_DYNLOADFLAG 0\n\n")
 val () = fprint! (out, "#include \"share/atspre_staload.hats\"\n\n")
 val () = fprint! (out, "staload \"./overture_sched.sats\"\n\n")
+val () = emit_typedefs_ats (out)
+val () = fprint! (out, "\n")
 //
 val () = emit_externs (out, ctx)
 val () = fprint! (out, "\n")
 //
 fun senses
-  (xs: list0(@(string, bool))): void =
+  (xs: list0(@(string, cpay))): void =
   case+ xs of
   | list0_nil () => ()
   | list0_cons (x, xs) => let
-      val () =
-        if x.1
-          then fprint! (out,
+      val () = (
+        case+ x.1 of
+        | CPbool () => fprint! (out,
             "implement ", x.0, "_sense (t) = ((t mod 3) = 0)\n")
-          else fprint! (out, "implement ", x.0, "_sense (t) = t\n")
+        | CPint () => fprint! (out, "implement ", x.0, "_sense (t) = t\n")
+        | CPrec _ => let
+            val () = fprint! (out,
+              "implement ", x.0, "_sense (t, v) = v := @{")
+            fun ffs (fs: list0(@(symbol, bool)), k: int): void =
+              case+ fs of
+              | list0_nil () => ()
+              | list0_cons (f, fs) => let
+                  val () = if k > 0 then fprint! (out, ", ")
+                  val () = fprint! (out, symbol_get_name (f.0), "= ")
+                  val () =
+                    if f.1 then fprint! (out, "(((t + ", k, ") mod 3) = 0)")
+                    else fprint! (out, "t + ", k)
+                in
+                  ffs (fs, k + 1)
+                end
+            val () = ffs (abst_fields (x.1), 0)
+          in
+            fprint! (out, "}\n")
+          end
+      ) : void
     in
       senses (xs)
     end
 val () = senses (list0_reverse (!(ctx.x_senses)))
 //
 fun acts
-  (xs: list0(@(string, bool))): void =
+  (xs: list0(@(string, cpay))): void =
   case+ xs of
   | list0_nil () => ()
   | list0_cons (x, xs) => let
-      val () = fprint! (out,
-        "implement ", x.0, "_actuate (t, v) = ",
-        "println! (\"[t=\", t, \"] ", x.0, " = \", v)\n")
+      val () = (
+        case+ x.1 of
+        | CPrec _ => let
+            val () = fprint! (out,
+              "implement ", x.0, "_actuate (t, v) = ",
+              "println! (\"[t=\", t, \"] ", x.0, " = {\", ")
+            fun ffs (fs: list0(@(symbol, bool)), k: int): void =
+              case+ fs of
+              | list0_nil () => ()
+              | list0_cons (f, fs) => let
+                  val () = if k > 0 then fprint! (out, "\", \", ")
+                  val () = fprint! (out, "v.", symbol_get_name (f.0), ", ")
+                in
+                  ffs (fs, k + 1)
+                end
+            val () = ffs (abst_fields (x.1), 0)
+          in
+            fprint! (out, "\"}\")\n")
+          end
+        | _ (*scalar*) => fprint! (out,
+            "implement ", x.0, "_actuate (t, v) = ",
+            "println! (\"[t=\", t, \"] ", x.0, " = \", v)\n")
+      ) : void
     in
       acts (xs)
     end
 val () = acts (list0_reverse (!(ctx.x_acts)))
 //
 fun calls
-  (xs: list0(@(string, list0(bool), list0(bool)))): void =
+  (xs: list0(@(string, list0(cpay), list0(cpay)))): void =
   case+ xs of
   | list0_nil () => ()
   | list0_cons (x, xs) => let
       val () = fprint! (out, "implement ", x.0, " (")
-      fun args (bs: list0(bool), i: int): void =
+      fun args (bs: list0(cpay), i: int): int =
         case+ bs of
-        | list0_nil () => ()
+        | list0_nil () => i
         | list0_cons (_, bs) => let
             val () = if i > 0 then fprint! (out, ", ")
             val () = fprint! (out, "a", i)
           in
             args (bs, i + 1)
           end
-      val () = args (x.1, 0)
+      val n = args (x.1, 0)
+      val orec = (
+        case+ x.2 of
+        | list0_cons (b, list0_nil ()) => cpay_isrec (b)
+        | _ (*rest*) => false
+      ) : bool
+      val () = if orec then
+        (if n > 0 then fprint! (out, ", r0") else fprint! (out, "r0"))
       val () = fprint! (out, ") = ")
       (* sum of the inputs, bools counted as 0/1 *)
       fn sum (): void = let
-        fun loop (bs: list0(bool), i: int, first: bool): bool =
+        fun loop (bs: list0(cpay), i: int, first: bool): bool =
           case+ bs of
           | list0_nil () => first
           | list0_cons (b, bs) => let
               val () = if not (first) then fprint! (out, " + ")
-              val () =
-                if b then fprint! (out, "(if a", i, " then 1 else 0)")
-                else fprint! (out, "a", i)
+              val () = (
+                case+ b of
+                | CPbool () => fprint! (out, "(if a", i, " then 1 else 0)")
+                | CPint () => fprint! (out, "a", i)
+                | CPrec _ => let
+                    val () = fprint! (out, "(")
+                    fun rfs (fs: list0(@(symbol, bool)), k: int): void =
+                      case+ fs of
+                      | list0_nil () => ()
+                      | list0_cons (f, fs) => let
+                          val () = if k > 0 then fprint! (out, " + ")
+                          val () =
+                            if f.1 then fprint! (out,
+                              "(if a", i, ".", symbol_get_name (f.0),
+                              " then 1 else 0)")
+                            else fprint! (out,
+                              "a", i, ".", symbol_get_name (f.0))
+                        in
+                          rfs (fs, k + 1)
+                        end
+                    val () = rfs (abst_fields (b), 0)
+                  in
+                    fprint! (out, ")")
+                  end
+              ) : void
             in
               loop (bs, i + 1, false)
             end
@@ -1738,18 +2047,40 @@ fun calls
       end
       val () = (
         case+ x.2 of
-        | list0_cons (b, list0_nil ()) =>
-            if b then fprint! (out, "true")
-            else (fprint! (out, "("); sum (); fprint! (out, " + 0)"))
+        | list0_cons (b, list0_nil ()) => (
+            case+ b of
+            | CPbool () => fprint! (out, "true")
+            | CPint () =>
+                (fprint! (out, "("); sum (); fprint! (out, " + 0)"))
+            | CPrec _ => let
+                val () = fprint! (out, "r0 := @{")
+                fun ofs (fs: list0(@(symbol, bool)), k: int): void =
+                  case+ fs of
+                  | list0_nil () => ()
+                  | list0_cons (f, fs) => let
+                      val () = if k > 0 then fprint! (out, ", ")
+                      val () = fprint! (out, symbol_get_name (f.0), "= ")
+                      val () =
+                        if f.1 then fprint! (out, "true")
+                        else (fprint! (out, "(");
+                              sum (); fprint! (out, " + ", k, ")"))
+                    in
+                      ofs (fs, k + 1)
+                    end
+                val () = ofs (abst_fields (b), 0)
+              in
+                fprint! (out, "}")
+              end
+          )
         | _ (*tuple*) => let
             val () = fprint! (out, "(")
-            fun outs (bs: list0(bool), i: int): void =
+            fun outs (bs: list0(cpay), i: int): void =
               case+ bs of
               | list0_nil () => ()
               | list0_cons (b, bs) => let
                   val () = if i > 0 then fprint! (out, ", ")
                   val () =
-                    if b then fprint! (out, "true")
+                    if cpay_isbool (b) then fprint! (out, "true")
                     else (fprint! (out, "("); sum ();
                           fprint! (out, " + ", i, ")"))
                 in
@@ -1774,7 +2105,7 @@ end // end of [emit_stubs]
 //
 // the C backend: same cells/buffers/actions, emitted as plain C99
 //
-fn ctystr (b: bool): string = if b then "bool" else "int"
+
 
 fn emit_fval_c
   (out: FILEref, fv: fval): void =
@@ -1798,7 +2129,9 @@ case+ a of
 | ACTsense (name, c) => let
     val () = emit_fire_c (out, c.c_n, c.c_d)
   in
-    fprint! (out, "c", c.c_id, " = ", name, "_sense(t);")
+    if cpay_isrec (c.c_pay)
+      then fprint! (out, name, "_sense(t, &c", c.c_id, ");")
+      else fprint! (out, "c", c.c_id, " = ", name, "_sense(t);")
   end
 //
 | ACTcall (name, args, outs) => (
@@ -1826,12 +2159,29 @@ case+ a of
           | list0_nil () => ()
           | list0_cons (fv, args) => let
               val () = if not (first) then fprint! (out, ", ")
-              val () = emit_fval_c (out, fv)
+              (* records pass by pointer *)
+              val () =
+                if cpay_isrec (fval_pay (fv))
+                  then (fprint! (out, "&"); emit_fval_c (out, fv))
+                  else emit_fval_c (out, fv)
             in
               cargs (args, false)
             end
       in
         case+ outs of
+        | list0_cons (o0, list0_nil ())
+            when cpay_isrec (o0.c_pay) => let
+            (* the out record is the last parameter, by pointer *)
+            val () = emit_fire_c (out, o0.c_n, o0.c_d)
+            val () = fprint! (out, name, "(")
+            val () = cargs (args, true)
+            val () = (
+              case+ args of
+              | list0_nil () => () | list0_cons _ => fprint! (out, ", ")
+            ) : void
+          in
+            fprint! (out, "&c", o0.c_id, ");")
+          end
         | list0_cons (o0, list0_nil ()) => let
             val () = emit_fire_c (out, o0.c_n, o0.c_d)
             val () = fprint! (out, "c", o0.c_id, " = ", name, "(")
@@ -1920,7 +2270,9 @@ case+ a of
 | ACTactuate (name, c) => let
     val () = emit_fire_c (out, c.c_n, c.c_d)
   in
-    fprint! (out, name, "_actuate(t, c", c.c_id, ");")
+    if cpay_isrec (c.c_pay)
+      then fprint! (out, name, "_actuate(t, &c", c.c_id, ");")
+      else fprint! (out, name, "_actuate(t, c", c.c_id, ");")
   end
 //
 | ACTactuate_gated (name, v, p) => let
@@ -1950,7 +2302,10 @@ end // end of [emit_actions_c]
 
 (*
 ** shared prototype printer: [defn] selects declarations (extern,
-** with a trailing semicolon) or definition headers for the stubs
+** with a trailing semicolon) or full STUB definitions -- the C
+** twins of emit_stubs' placeholders (same fixed input patterns,
+** same transcript formats, same sums). Behavior changes here must
+** be mirrored there: the suite diffs the backends' outputs.
 *)
 fn emit_protos_c
   (out: FILEref, ctx: ccctx, defn: bool): void = let
@@ -1959,17 +2314,42 @@ fn pre (): void =
   if not (defn) then fprint! (out, "extern ")
 //
 fun senses
-  (xs: list0(@(string, bool))): void =
+  (xs: list0(@(string, cpay))): void =
   case+ xs of
   | list0_nil () => ()
   | list0_cons (x, xs) => let
       val () = pre ()
-      val () = fprint! (out, ctystr (x.1), " ", x.0, "_sense(int t)")
+      val () = (
+        case+ x.1 of
+        | CPrec _ => fprint! (out,
+            "void ", x.0, "_sense(int t, ", ctystr (x.1), " *v)")
+        | _ (*scalar*) => fprint! (out,
+            ctystr (x.1), " ", x.0, "_sense(int t)")
+      ) : void
       val () =
         if defn then (
-          if x.1
-            then fprint! (out, " { return (t % 3) == 0; }\n")
-            else fprint! (out, " { return t; }\n")
+          case+ x.1 of
+          | CPbool () => fprint! (out, " { return (t % 3) == 0; }\n")
+          | CPint () => fprint! (out, " { return t; }\n")
+          | CPrec _ => let
+              val () = fprint! (out, " { ")
+              fun ffs (fs: list0(@(symbol, bool)), k: int): void =
+                case+ fs of
+                | list0_nil () => ()
+                | list0_cons (f, fs) => let
+                    val () =
+                      if f.1 then fprint! (out,
+                        "v->", symbol_get_name (f.0),
+                        " = ((t + ", k, ") % 3) == 0; ")
+                      else fprint! (out,
+                        "v->", symbol_get_name (f.0), " = t + ", k, "; ")
+                  in
+                    ffs (fs, k + 1)
+                  end
+              val () = ffs (abst_fields (x.1), 0)
+            in
+              fprint! (out, "}\n")
+            end
         ) else fprint! (out, ";\n")
     in
       senses (xs)
@@ -1977,21 +2357,57 @@ fun senses
 val () = senses (list0_reverse (!(ctx.x_senses)))
 //
 fun acts
-  (xs: list0(@(string, bool))): void =
+  (xs: list0(@(string, cpay))): void =
   case+ xs of
   | list0_nil () => ()
   | list0_cons (x, xs) => let
       val () = pre ()
-      val () = fprint! (out,
-        "void ", x.0, "_actuate(int t, ", ctystr (x.1), " v)")
+      val () = (
+        case+ x.1 of
+        | CPrec _ => fprint! (out,
+            "void ", x.0, "_actuate(int t, ", ctystr (x.1), " *v)")
+        | _ (*scalar*) => fprint! (out,
+            "void ", x.0, "_actuate(int t, ", ctystr (x.1), " v)")
+      ) : void
       val () =
         if defn then (
-          if x.1
-            then fprint! (out,
+          case+ x.1 of
+          | CPbool () => fprint! (out,
               " { printf(\"[t=%d] ", x.0,
               " = %s\\n\", t, v ? \"true\" : \"false\"); }\n")
-            else fprint! (out,
+          | CPint () => fprint! (out,
               " { printf(\"[t=%d] ", x.0, " = %d\\n\", t, v); }\n")
+          | CPrec _ => let
+              (* match the hosted-ATS stub's println! byte for byte *)
+              val () = fprint! (out, " { printf(\"[t=%d] ", x.0, " = {")
+              fun fmt (fs: list0(@(symbol, bool)), k: int): void =
+                case+ fs of
+                | list0_nil () => ()
+                | list0_cons (f, fs) => let
+                    val () = if k > 0 then fprint! (out, ", ")
+                    val () = fprint! (out,
+                      (if f.1 then "%s" else "%d"): string)
+                  in
+                    fmt (fs, k + 1)
+                  end
+              val () = fmt (abst_fields (x.1), 0)
+              val () = fprint! (out, "}\\n\", t")
+              fun fargs (fs: list0(@(symbol, bool))): void =
+                case+ fs of
+                | list0_nil () => ()
+                | list0_cons (f, fs) => let
+                    val () =
+                      if f.1 then fprint! (out,
+                        ", v->", symbol_get_name (f.0),
+                        " ? \"true\" : \"false\"")
+                      else fprint! (out, ", v->", symbol_get_name (f.0))
+                  in
+                    fargs (fs)
+                  end
+              val () = fargs (abst_fields (x.1))
+            in
+              fprint! (out, "); }\n")
+            end
         ) else fprint! (out, ";\n")
     in
       acts (xs)
@@ -1999,7 +2415,7 @@ fun acts
 val () = acts (list0_reverse (!(ctx.x_acts)))
 //
 fun calls
-  (xs: list0(@(string, list0(bool), list0(bool)))): void =
+  (xs: list0(@(string, list0(cpay), list0(cpay)))): void =
   case+ xs of
   | list0_nil () => ()
   | list0_cons (x, xs) => let
@@ -2011,23 +2427,36 @@ fun calls
       val () = (
         case+ x.2 of
         | list0_cons (b, list0_nil ()) =>
-            fprint! (out, ctystr (b), " ", x.0, "(")
+            if cpay_isrec (b) then fprint! (out, "void ", x.0, "(")
+            else fprint! (out, ctystr (b), " ", x.0, "(")
         | _ (*rest*) => fprint! (out, "void ", x.0, "(")
       ) : void
-      fun cargs (bs: list0(bool), i: int): int =
+      fun cargs (bs: list0(cpay), i: int): int =
         case+ bs of
         | list0_nil () => i
         | list0_cons (b, bs) => let
             val () = if i > 0 then fprint! (out, ", ")
-            val () = fprint! (out, ctystr (b), " a", i)
+            val () =
+              if cpay_isrec (b)
+                then fprint! (out, ctystr (b), " *a", i)
+                else fprint! (out, ctystr (b), " a", i)
           in
             cargs (bs, i + 1)
           end
       val n = cargs (x.1, 0)
+      val () = (
+        case+ x.2 of
+        | list0_cons (b, list0_nil ()) when cpay_isrec (b) => let
+            val () = if n > 0 then fprint! (out, ", ")
+          in
+            fprint! (out, ctystr (b), " *r0")
+          end
+        | _ (*rest*) => ()
+      ) : void
       val () =
         if not (single) then (
           let
-            fun couts (bs: list0(bool), i: int, j: int): void =
+            fun couts (bs: list0(cpay), i: int, j: int): void =
               case+ bs of
               | list0_nil () => ()
               | list0_cons (b, bs) => let
@@ -2047,14 +2476,36 @@ fun calls
         if defn then let
           (* stub body: each output is the sum of the inputs (+idx) *)
           fn sum (): void = let
-            fun loop (bs: list0(bool), i: int, first: bool): bool =
+            fun loop (bs: list0(cpay), i: int, first: bool): bool =
               case+ bs of
               | list0_nil () => first
               | list0_cons (b, bs) => let
                   val () = if not (first) then fprint! (out, " + ")
-                  val () =
-                    if b then fprint! (out, "(a", i, " ? 1 : 0)")
-                    else fprint! (out, "a", i)
+                  val () = (
+                    case+ b of
+                    | CPbool () => fprint! (out, "(a", i, " ? 1 : 0)")
+                    | CPint () => fprint! (out, "a", i)
+                    | CPrec _ => let
+                        val () = fprint! (out, "(")
+                        fun rfs (fs: list0(@(symbol, bool)), k: int): void =
+                          case+ fs of
+                          | list0_nil () => ()
+                          | list0_cons (f, fs) => let
+                              val () = if k > 0 then fprint! (out, " + ")
+                              val () =
+                                if f.1 then fprint! (out,
+                                  "(a", i, "->", symbol_get_name (f.0),
+                                  " ? 1 : 0)")
+                                else fprint! (out,
+                                  "a", i, "->", symbol_get_name (f.0))
+                            in
+                              rfs (fs, k + 1)
+                            end
+                        val () = rfs (abst_fields (b), 0)
+                      in
+                        fprint! (out, ")")
+                      end
+                  ) : void
                 in
                   loop (bs, i + 1, false)
                 end
@@ -2066,17 +2517,36 @@ fun calls
           val () = fprint! (out, " { ")
           val () = (
             case+ x.2 of
-            | list0_cons (b, list0_nil ()) =>
-                if b then fprint! (out, "return true; ")
-                else (fprint! (out, "return ("); sum ();
+            | list0_cons (b, list0_nil ()) => (
+                case+ b of
+                | CPbool () => fprint! (out, "return true; ")
+                | CPint () => (fprint! (out, "return ("); sum ();
                       fprint! (out, " + 0); "))
+                | CPrec _ => let
+                    fun ofs (fs: list0(@(symbol, bool)), k: int): void =
+                      case+ fs of
+                      | list0_nil () => ()
+                      | list0_cons (f, fs) => let
+                          val () =
+                            if f.1 then fprint! (out,
+                              "r0->", symbol_get_name (f.0), " = true; ")
+                            else (fprint! (out,
+                              "r0->", symbol_get_name (f.0), " = (");
+                              sum (); fprint! (out, " + ", k, "); "))
+                        in
+                          ofs (fs, k + 1)
+                        end
+                  in
+                    ofs (abst_fields (b), 0)
+                  end
+              )
             | _ (*rest*) => let
-                fun bodies (bs: list0(bool), j: int): void =
+                fun bodies (bs: list0(cpay), j: int): void =
                   case+ bs of
                   | list0_nil () => ()
                   | list0_cons (b, bs) => let
                       val () =
-                        if b then fprint! (out, "*r", j, " = true; ")
+                        if cpay_isbool (b) then fprint! (out, "*r", j, " = true; ")
                         else (fprint! (out, "*r", j, " = (");
                               sum (); fprint! (out, " + ", j, "); "))
                     in
@@ -2114,6 +2584,8 @@ val () = fprint! (out,
   "#endif\n",
   "#include <stdbool.h>\n\n")
 //
+val () = emit_typedefs_c (out)
+val () = fprint! (out, "\n")
 val () = emit_protos_c (out, ctx, false)
 val () = fprint! (out, "\n")
 //
@@ -2121,10 +2593,13 @@ fun cells (cs: list0(cell)): void =
   case+ cs of
   | list0_nil () => ()
   | list0_cons (c, cs) => let
-      val () =
-        if c.c_bool
-          then fprint! (out, "static bool c", c.c_id, " = false;\n")
-          else fprint! (out, "static int c", c.c_id, " = 0;\n")
+      val () = (
+        case+ c.c_pay of
+        | CPbool () => fprint! (out, "static bool c", c.c_id, " = false;\n")
+        | CPint () => fprint! (out, "static int c", c.c_id, " = 0;\n")
+        | CPrec (s) => fprint! (out,
+            "static ", symbol_get_name (s), " c", c.c_id, ";\n")
+      ) : void
     in
       cells (cs)
     end
@@ -2136,7 +2611,7 @@ fun bufs (bs: list0(buf)): void =
   | list0_nil () => ()
   | list0_cons (b, bs) => let
       val () = fprint! (out,
-        "static ", ctystr (b.b_bool), " b", b.b_id, "[", b.b_depth, "];\n")
+        "static ", ctystr (b.b_pay), " b", b.b_id, "[", b.b_depth, "];\n")
       val () = fprint! (out, "static int b", b.b_id, "_r = 0;\n")
       val () = fprint! (out, "static int b", b.b_id, "_w = 0;\n")
     in
@@ -2210,6 +2685,8 @@ val () = fprint! (out,
   "/* generated by overture --codegen=c (", base, ");\n",
   " * deterministic default stubs; replace for real IO */\n\n",
   "#include <stdio.h>\n#include <stdbool.h>\n\n")
+val () = emit_typedefs_c (out)
+val () = fprint! (out, "\n")
 //
 val () = emit_protos_c (out, ctx, true)
 //
@@ -2256,7 +2733,12 @@ case+ a of
 | ACTsense (name, c) => let
     val () = firehdr (out, c.c_n, c.c_d)
   in
-    fprint! (out, "cell_set_", c.c_id, " (", name, "_sense (t))")
+    if cpay_isrec (c.c_pay) then let
+      val () = fprint! (out,
+        "let var v: ", ctystr (c.c_pay), " in (",
+        name, "_sense (t, v); cell_set_", c.c_id, " (v)) end")
+    in end
+    else fprint! (out, "cell_set_", c.c_id, " (", name, "_sense (t))")
   end
 //
 | ACTcall (name, args, outs) => (
@@ -2265,6 +2747,8 @@ case+ a of
         case+ (args, outs) of
         | (list0_cons (b, list0_cons (x, list0_cons (y, list0_nil ()))),
            list0_cons (o, list0_nil ())) => let
+            val () = if cpay_isrec (o.c_pay) then cgerr
+              ("codegen: merge over record flows is not yet supported by ats-bare")
             val bc = fval_cell (b, "merge")
             val () = firehdr (out, o.c_n, o.c_d)
             val () = fprint! (out,
@@ -2279,6 +2763,67 @@ case+ a of
       )
     | _ (*extern call*) => (
         case+ outs of
+        | list0_cons (o0, list0_nil ())
+            when fvals_anyrec (args) orelse cpay_isrec (o0.c_pay) => let
+            val () = firehdr (out, o0.c_n, o0.c_d)
+            val () = fprint! (out, "let ")
+            fun decls (args: list0(fval), i: int): void =
+              case+ args of
+              | list0_nil () => ()
+              | list0_cons (fv, args) => let
+                  val p = fval_pay (fv)
+                  val () = if cpay_isrec (p)
+                    then fprint! (out, "var a", i, ": ", ctystr (p), "; ")
+                in
+                  decls (args, i + 1)
+                end
+            val () = decls (args, 0)
+            val orec = cpay_isrec (o0.c_pay)
+            val () = if orec
+              then fprint! (out, "var rr: ", ctystr (o0.c_pay), "; ")
+            val () = fprint! (out, "in (")
+            fun gets (args: list0(fval), i: int): void =
+              case+ args of
+              | list0_nil () => ()
+              | list0_cons (fv, args) => let
+                  val () =
+                    if cpay_isrec (fval_pay (fv)) then let
+                      val c = fval_cell (fv, name)
+                    in
+                      fprint! (out, "cell_get_", c.c_id, " (a", i, "); ")
+                    end
+                in
+                  gets (args, i + 1)
+                end
+            val () = gets (args, 0)
+            val () = if orec then fprint! (out, name, " (")
+              else fprint! (out, "cell_set_", o0.c_id, " (", name, " (")
+            fun rloop (args: list0(fval), i: int, first: bool): void =
+              case+ args of
+              | list0_nil () => ()
+              | list0_cons (fv, args) => let
+                  val () = if not (first) then fprint! (out, ", ")
+                  val () =
+                    if cpay_isrec (fval_pay (fv))
+                      then fprint! (out, "a", i)
+                      else emit_atsfval (out, fv)
+                in
+                  rloop (args, i + 1, false)
+                end
+            val () = rloop (args, 0, true)
+            val () =
+              if orec then let
+                val () = (
+                  case+ args of
+                  | list0_nil () => () | list0_cons _ => fprint! (out, ", ")
+                ) : void
+              in
+                fprint! (out, "rr); cell_set_", o0.c_id, " (rr)")
+              end
+              else fprint! (out, "))")
+          in
+            fprint! (out, ") end")
+          end
         | list0_cons (o0, list0_nil ()) => let
             val () = firehdr (out, o0.c_n, o0.c_d)
             val () = fprint! (out, "cell_set_", o0.c_id, " (", name, " (")
@@ -2304,10 +2849,19 @@ case+ a of
 //
 | ACTcopy (fv, o) => let
     val () = firehdr (out, o.c_n, o.c_d)
-    val () = fprint! (out, "cell_set_", o.c_id, " (")
-    val () = emit_atsfval (out, fv)
   in
-    fprint! (out, ")")
+    if cpay_isrec (o.c_pay) then let
+      val c = fval_cell (fv, "copy")
+      val () = fprint! (out,
+        "let var v: ", ctystr (o.c_pay), " in (cell_get_", c.c_id,
+        " (v); cell_set_", o.c_id, " (v)) end")
+    in end
+    else let
+      val () = fprint! (out, "cell_set_", o.c_id, " (")
+      val () = emit_atsfval (out, fv)
+    in
+      fprint! (out, ")")
+    end
   end
 //
 | ACTfbyemit (v0, st, o) => let
@@ -2359,7 +2913,12 @@ case+ a of
 | ACTactuate (name, c) => let
     val () = firehdr (out, c.c_n, c.c_d)
   in
-    fprint! (out, name, "_actuate (t, cell_get_", c.c_id, " ())")
+    if cpay_isrec (c.c_pay) then let
+      val () = fprint! (out,
+        "let var v: ", ctystr (c.c_pay), " in (cell_get_", c.c_id,
+        " (v); ", name, "_actuate (t, v)) end")
+    in end
+    else fprint! (out, name, "_actuate (t, cell_get_", c.c_id, " ())")
   end
 //
 | ACTactuate_gated (name, v, pc) => let
@@ -2391,18 +2950,38 @@ val () = fprint! (out,
   "const int overture_hyperperiod = ", tm.1, ";\n",
   "const int overture_wrap_at = ", tm.2 + 2 * tm.1, ";\n\n")
 //
+val () = emit_typedefs_c (out)
+val () = fprint! (out, "\n")
+//
 fun cells (cs: list0(cell)): void =
   case+ cs of
   | list0_nil () => ()
   | list0_cons (c, cs) => let
-      val ty = (if c.c_bool then "atstype_bool" else "int"): string
-      val v0 = (if c.c_bool then "0" else "0"): string
-      val () = fprint! (out,
-        "static ", ty, " c", c.c_id, " = ", v0, ";\n",
-        "ATSinline() ", ty, " cell_get_", c.c_id,
-        " () { return c", c.c_id, "; }\n",
-        "ATSinline() atstype_void cell_set_", c.c_id,
-        " (", ty, " v) { c", c.c_id, " = v; }\n")
+      val () = (
+        case+ c.c_pay of
+        | CPrec (sym) => let
+            val ty = symbol_get_name (sym)
+          in
+            (* patsopt types &-arguments as atstype_ref; match it *)
+            fprint! (out,
+              "static ", ty, " c", c.c_id, ";\n",
+              "ATSinline() atstype_void cell_get_", c.c_id,
+              " (atstype_ref dst) { *(", ty, " *)dst = c", c.c_id, "; }\n",
+              "ATSinline() atstype_void cell_set_", c.c_id,
+              " (atstype_ref v) { c", c.c_id, " = *(", ty, " *)v; }\n")
+          end
+        | _ (*scalar*) => let
+            val ty = (if cpay_isbool (c.c_pay)
+              then "atstype_bool" else "int"): string
+          in
+            fprint! (out,
+              "static ", ty, " c", c.c_id, " = 0;\n",
+              "ATSinline() ", ty, " cell_get_", c.c_id,
+              " () { return c", c.c_id, "; }\n",
+              "ATSinline() atstype_void cell_set_", c.c_id,
+              " (", ty, " v) { c", c.c_id, " = v; }\n")
+          end
+      ) : void
     in
       cells (cs)
     end
@@ -2413,7 +2992,8 @@ fun bufs (bs: list0(buf)): void =
   case+ bs of
   | list0_nil () => ()
   | list0_cons (b, bs) => let
-      val ty = (if b.b_bool then "atstype_bool" else "int"): string
+      val ty = (if cpay_isbool (b.b_pay)
+        then "atstype_bool" else "int"): string
       val () = fprint! (out,
         "static ", ty, " b", b.b_id, "_arr[", b.b_depth, "];\n",
         "static int b", b.b_id, "_r = 0;\n",
@@ -2457,6 +3037,8 @@ val () = fprint! (out,
   "#include \"prelude/CATS/bool.cats\"\n",
   "%}\n\n")
 //
+val () = emit_typedefs_ats (out)
+val () = fprint! (out, "\n")
 //
 // the state floor's accessor surface
 //
@@ -2464,12 +3046,27 @@ fun celldecls (cs: list0(cell)): void =
   case+ cs of
   | list0_nil () => ()
   | list0_cons (c, cs) => let
-      val ty = (if c.c_bool then "bool" else "int"): string
-      val () = fprint! (out,
-        "fun cell_get_", c.c_id, " (): ", ty,
-        " = \"ext#\"\n",
-        "fun cell_set_", c.c_id, " (v: ", ty, "): void",
-        " = \"ext#\"\n")
+      val () = (
+        case+ c.c_pay of
+        | CPrec _ => let
+            val ty = ctystr (c.c_pay)
+          in
+            fprint! (out,
+              "fun cell_get_", c.c_id, " (dst: &", ty, "? >> ", ty,
+              "): void = \"ext#\"\n",
+              "fun cell_set_", c.c_id, " (v: &", ty, "): void",
+              " = \"ext#\"\n")
+          end
+        | _ (*scalar*) => let
+            val ty = ctystr (c.c_pay)
+          in
+            fprint! (out,
+              "fun cell_get_", c.c_id, " (): ", ty,
+              " = \"ext#\"\n",
+              "fun cell_set_", c.c_id, " (v: ", ty, "): void",
+              " = \"ext#\"\n")
+          end
+      ) : void
     in
       celldecls (cs)
     end
@@ -2479,7 +3076,7 @@ fun bufdecls (bs: list0(buf)): void =
   case+ bs of
   | list0_nil () => ()
   | list0_cons (b, bs) => let
-      val ty = (if b.b_bool then "bool" else "int"): string
+      val ty = ctystr (b.b_pay)
       val () = fprint! (out,
         "fun buf_read_", b.b_id, " (): ", ty,
         " = \"ext#\"\n",
@@ -2493,50 +3090,68 @@ val () = fprint! (out, "\n")
 //
 // the program's stub surface
 //
-fn tystr2 (b: bool): string = if b then "bool" else "int"
-fun senses (xs: list0(@(string, bool))): void =
+fun senses (xs: list0(@(string, cpay))): void =
   case+ xs of
   | list0_nil () => ()
   | list0_cons (x, xs) => let
-      val () = fprint! (out,
-        "fun ", x.0, "_sense (t: int): ", tystr2 (x.1),
-        " = \"ext#", x.0, "_sense\"\n")
+      val () =
+        if cpay_isrec (x.1)
+          then fprint! (out,
+            "fun ", x.0, "_sense (t: int, v: &", ctystr (x.1),
+            "? >> ", ctystr (x.1), "): void = \"ext#", x.0, "_sense\"\n")
+          else fprint! (out,
+            "fun ", x.0, "_sense (t: int): ", ctystr (x.1),
+            " = \"ext#", x.0, "_sense\"\n")
     in
       senses (xs)
     end
 val () = senses (list0_reverse (!(ctx.x_senses)))
-fun acts (xs: list0(@(string, bool))): void =
+fun acts (xs: list0(@(string, cpay))): void =
   case+ xs of
   | list0_nil () => ()
   | list0_cons (x, xs) => let
-      val () = fprint! (out,
-        "fun ", x.0, "_actuate (t: int, v: ", tystr2 (x.1),
-        "): void = \"ext#", x.0, "_actuate\"\n")
+      val () =
+        if cpay_isrec (x.1)
+          then fprint! (out,
+            "fun ", x.0, "_actuate (t: int, v: &", ctystr (x.1),
+            "): void = \"ext#", x.0, "_actuate\"\n")
+          else fprint! (out,
+            "fun ", x.0, "_actuate (t: int, v: ", ctystr (x.1),
+            "): void = \"ext#", x.0, "_actuate\"\n")
     in
       acts (xs)
     end
 val () = acts (list0_reverse (!(ctx.x_acts)))
 fun calls
-  (xs: list0(@(string, list0(bool), list0(bool)))): void =
+  (xs: list0(@(string, list0(cpay), list0(cpay)))): void =
   case+ xs of
   | list0_nil () => ()
   | list0_cons (x, xs) => let
       val () = fprint! (out, "fun ", x.0, " (")
-      fun cargs (bs: list0(bool), i: int): void =
+      fun cargs (bs: list0(cpay), i: int): int =
         case+ bs of
-        | list0_nil () => ()
+        | list0_nil () => i
         | list0_cons (b, bs) => let
             val () = if i > 0 then fprint! (out, ", ")
-            val () = fprint! (out, "a", i, ": ", tystr2 (b))
+            val () =
+              if cpay_isrec (b)
+                then fprint! (out, "a", i, ": &", ctystr (b))
+                else fprint! (out, "a", i, ": ", ctystr (b))
           in
             cargs (bs, i + 1)
           end
-      val () = cargs (x.1, 0)
-      val () = fprint! (out, "): ")
+      val n = cargs (x.1, 0)
       val () = (
         case+ x.2 of
-        | list0_cons (b, list0_nil ()) => fprint! (out, tystr2 (b))
-        | _ (*rest*) => fprint! (out, "void") (* multi: rejected above *)
+        | list0_cons (b, list0_nil ()) =>
+            if cpay_isrec (b) then let
+              val () = if n > 0 then fprint! (out, ", ")
+            in
+              fprint! (out, "r0: &", ctystr (b), "? >> ", ctystr (b),
+                "): void")
+            end
+            else fprint! (out, "): ", ctystr (b))
+        | _ (*rest*) => fprint! (out, "): void") (* multi: rejected above *)
       ) : void
       val () = fprint! (out, " = \"ext#", x.0, "\"\n")
     in
@@ -2685,13 +3300,13 @@ fun sensors
         | T2YPErate (_, elt, clk) => let
             val nd = eval_clk (clk)
           in
-            cell_new (ctx, t2ype_isbool (elt, list0_nil ()), nd.0, nd.1)
+            cell_new (ctx, t2ype_cpay (elt, list0_nil ()), nd.0, nd.1)
           end
-        | _ (*rest*) => cell_new (ctx, false, 1, 0)
+        | _ (*rest*) => cell_new (ctx, CPint (), 1, 0)
       ) : cell
       val () = emit_pre (ctx, ACTsense (name, c))
       val r = ctx.x_senses
-      val () = !r := list0_cons (@(name, c.c_bool), !r)
+      val () = !r := list0_cons (@(name, c.c_pay), !r)
     in
       sensors (d2vs,
         list0_cons (@(d2var_get_stamp (d2v), FVcell (c)), env))
@@ -2717,15 +3332,15 @@ fun eqns
               case+ fv of
               | FVgated (v, _) => (
                   emit_strict (ctx, ACTactuate_gated (name, v, fval_presence (fv)));
-                  v.c_bool
+                  v.c_pay
                 )
               | _ (*rest*) => let
                   val c = fval_cell (fv, "a top-level equation")
                   val () = emit_strict (ctx, ACTactuate (name, c))
                 in
-                  c.c_bool
+                  c.c_pay
                 end
-            ) : bool
+            ) : cpay
             val r = ctx.x_acts
             val () = !r := list0_cons (@(name, isb), !r)
           in

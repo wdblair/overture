@@ -1,26 +1,34 @@
-(* the BMI270 gyro (x axis), sampled at 100 Hz over SPI bit-banged
-   in ATS on the sensor's own pins, decimated to a 10 Hz telemetry
-   flow logged in the AXI-SRAM flight recorder. One tick = 1 ms.
+(* the BMI270 gyro as a record flow: all three axes sampled at
+   100 Hz over SPI bit-banged in ATS, decimated to a 10 Hz
+   telemetry flow logged in the AXI-SRAM flight recorder.
+   One tick = 1 ms.
 
-   The recorder actuator appends (t, value) pairs; at 100 entries
-   the firmware jumps back into the ROM bootloader, so the host
-   reads the log over DFU with the RAM still warm and the flash
-   untouched:
+   vec3 is an abstract payload type given storage by the typedef
+   below; it crosses the hardware seam by reference, as a struct.
+   The recorder actuator appends (t, x, y, z) entries; at 100
+   entries the firmware jumps back into the ROM bootloader, so the
+   host reads the log over DFU with the RAM still warm:
 
-     dfu-util -a 0 -s 0x24070000:1024:force -U rec.bin
+     dfu-util -a 0 -s 0x24070000:2048:force -U rec.bin
      make recdump && ./recdump rec.bin
 
-   Both consumers undersample the same fast sensor -- (10,0) /^ 10
-   = (100,0) for telemetry, (10,0) /^ 50 = (500,0) for the LED
-   heartbeat -- no divisibility conditions arise. *)
+   The LED heartbeat undersamples the record flow itself before
+   collapsing it to a scalar: (10,0) /^ 50 = (500,0). *)
 
-sensor gyro : rate(int, (10, 0));
-actuator rec : rate(int, (100, 0));
+abstype vec3;
+typedef vec3 = { x : int, y : int, z : int };
+
+sensor gyro : rate(vec3, (10, 0));
+actuator rec : rate(vec3, (100, 0));
 actuator led : rate(int, (500, 0));
 
-extern node latest {c: clock}
-  (i : rate(int, c)) returns (o : rate(int, c))
+extern node latest {a: type}{c: clock}
+  (i : rate(a, c)) returns (o : rate(a, c))
+  wcet 1;
+
+extern node magnitude {c: clock}
+  (i : rate(vec3, c)) returns (o : rate(int, c))
   wcet 1;
 
 rec = latest(gyro /^ 10);
-led = gyro /^ 50;
+led = magnitude(gyro /^ 50);

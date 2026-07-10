@@ -228,6 +228,8 @@ fn ident_tnode
   | "infixr" => TOKkw_infixr ()
   | "prefix" => TOKkw_prefix ()
   | "wcet" => TOKkw_wcet ()
+  | "abstype" => TOKkw_abstype ()
+  | "typedef" => TOKkw_typedef ()
   | _ (*rest*) => TOKident (symbol_make (name))
 ) (* end of [ident_tnode] *)
 
@@ -441,6 +443,8 @@ case+ node of
 | TOKkw_infixr () => fprint! (out, "INFIXR")
 | TOKkw_prefix () => fprint! (out, "PREFIX")
 | TOKkw_wcet () => fprint! (out, "WCET")
+| TOKkw_abstype () => fprint! (out, "ABSTYPE")
+| TOKkw_typedef () => fprint! (out, "TYPEDEF")
 //
 | TOKlparen () => fprint! (out, "LPAREN")
 | TOKrparen () => fprint! (out, "RPAREN")
