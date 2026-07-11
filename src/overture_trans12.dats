@@ -18,6 +18,49 @@ staload "./overture_staexp.sats"
 staload "./overture_trans12.sats"
 
 (* ****** ****** *)
+(* the abstype registry (file-scope, one program per run) *)
+
+typedef absent = @(symbol, ref(option0(list0(@(symbol, bool)))))
+
+val the_abstbl = ref<list0(absent)> (list0_nil ())
+
+fn abstbl_lookup
+  (sym: symbol): option0(absent) = let
+  fun aux (xs: list0(absent)): option0(absent) =
+    case+ xs of
+    | list0_nil () => None0 ()
+    | list0_cons (x, xs) =>
+        if x.0 = sym then Some0 (x) else aux (xs)
+in
+  aux (the_abstbl[])
+end // end of [abstbl_lookup]
+
+implement abstype_exists (sym) =
+  case+ abstbl_lookup (sym) of
+  | Some0 _ => true | None0 () => false
+
+implement abstype_fields (sym) =
+  case+ abstbl_lookup (sym) of
+  | Some0 (x) => let val r = x.1 in r[] end
+  | None0 () => None0 ()
+
+implement abstype_defs () = let
+  fun aux (xs: list0(absent))
+    : list0(@(symbol, list0(@(symbol, bool)))) =
+    case+ xs of
+    | list0_nil () => list0_nil ()
+    | list0_cons (x, xs) => let
+        val r = x.1
+      in
+        case+ r[] of
+        | Some0 (fs) => list0_cons (@(x.0, fs), aux (xs))
+        | None0 () => aux (xs)
+      end
+in
+  aux (the_abstbl[]) (* reverse declaration order; harmless *)
+end // end of [abstype_defs]
+
+(* ****** ****** *)
 
 datatype
 d2var_ = D2VAR of (symbol, t2ype, int(*stamp*))
@@ -432,12 +475,14 @@ case+ s0e.s0e_node of
                 T2YPEerr ()
               end
           )
-        | None0 () => let
-            val () = errmsg (loc,
-              string_append ("unknown type: ", name))
-          in
-            T2YPEerr ()
-          end
+        | None0 () =>
+            if abstype_exists (sym) then T2YPEbase (sym)
+            else let
+              val () = errmsg (loc,
+                string_append ("unknown type: ", name))
+            in
+              T2YPEerr ()
+            end
       )
   end
 //
@@ -943,6 +988,70 @@ case+ decs of
   | D0Cfixity _ =>
       (* already applied during parsing *)
       loop (env, decs, sensors, actuators, nodes, eqns)
+  //
+  | D0Cabstype (ide) => let
+      val sym = ide.i0de_sym
+      val () = (
+        case+ abstbl_lookup (sym) of
+        | Some0 _ => errmsg (dec.d0ec_loc, string_append
+            ("abstype is already declared: ", symbol_get_name (sym)))
+        | None0 () => the_abstbl[] := list0_cons
+            (@(sym, ref<option0(list0(@(symbol, bool)))> (None0 ())),
+             the_abstbl[])
+      ) : void
+    in
+      loop (env, decs, sensors, actuators, nodes, eqns)
+    end
+  //
+  | D0Ctypedef (ide, fs) => let
+      val sym = ide.i0de_sym
+      fun fields_tr
+        (fs: list0(@(i0de, s0exp)), seen: list0(symbol))
+        : list0(@(symbol, bool)) =
+        case+ fs of
+        | list0_nil () => list0_nil ()
+        | list0_cons (f, fs) => let
+            val lab = (f.0).i0de_sym
+            fun dup (xs: list0(symbol)): bool =
+              case+ xs of
+              | list0_nil () => false
+              | list0_cons (x, xs) => if x = lab then true else dup (xs)
+            val () = if dup (seen) then errmsg ((f.0).i0de_loc,
+              string_append ("duplicate record label: ",
+                symbol_get_name (lab)))
+            val t2p = t0ype_tr (env, f.1)
+            val isb = (
+              case+ t2p of
+              | T2YPEbase (s) when symbol_get_name (s) = "int" => false
+              | T2YPEbase (s) when symbol_get_name (s) = "bool" => true
+              | T2YPEerr _ => false
+              | _ (*rest*) => let
+                  val () = errmsg ((f.1).s0e_loc,
+                    "record fields must be int or bool")
+                in
+                  false
+                end
+            ) : bool
+          in
+            list0_cons (@(lab, isb), fields_tr (fs, list0_cons (lab, seen)))
+          end // end of [fields_tr]
+      val fs2 = fields_tr (fs, list0_nil ())
+      val () = (
+        case+ abstbl_lookup (sym) of
+        | None0 () => errmsg (dec.d0ec_loc, string_append
+            ("typedef of an undeclared abstype: ", symbol_get_name (sym)))
+        | Some0 (x) => let
+            val r = x.1
+          in
+            case+ r[] of
+            | Some0 _ => errmsg (dec.d0ec_loc, string_append
+                ("abstype already has a typedef: ", symbol_get_name (sym)))
+            | None0 () => r[] := Some0 (fs2)
+          end
+      ) : void
+    in
+      loop (env, decs, sensors, actuators, nodes, eqns)
+    end
   //
   | D0Cnode (nd) => let
       val n2 = n0de_tr (env, nd)

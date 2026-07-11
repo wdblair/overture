@@ -277,6 +277,33 @@ case+ dec.d0ec_node of
     fprint! (out, ";\n")
   end
 //
+| D0Cabstype (ide) => let
+    val () = fprint! (out, "abstype ")
+    val () = fprint_symbol (out, ide.i0de_sym)
+  in
+    fprint! (out, ";\n")
+  end
+//
+| D0Ctypedef (ide, fs) => let
+    val () = fprint! (out, "typedef ")
+    val () = fprint_symbol (out, ide.i0de_sym)
+    val () = fprint! (out, " = { ")
+    fun fields (fs: list0(@(i0de, s0exp)), fst: bool): void =
+      case+ fs of
+      | list0_nil () => ()
+      | list0_cons (f, fs) => let
+          val () = if not (fst) then fprint! (out, ", ")
+          val () = fprint_symbol (out, (f.0).i0de_sym)
+          val () = fprint! (out, " : ")
+          val () = fprint_s0exp (out, f.1)
+        in
+          fields (fs, false)
+        end
+    val () = fields (fs, true)
+  in
+    fprint! (out, " };\n")
+  end
+//
 | D0Cfixity (knd, prec, opers) => let
     val () =
       (case+ knd of

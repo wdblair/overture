@@ -2,12 +2,12 @@
 ** recdump.dats -- decode a tmh7 flight-recorder dump. Hosted ATS2;
 ** built by [make recdump].
 **
-**   dfu-util -a 0 -s 0x24070000:1024:force -U rec.bin
+**   dfu-util -a 0 -s 0x24070000:2048:force -U rec.bin
 **   ./recdump rec.bin
 **
 ** The dump is raw little-endian 32-bit words: a six-word header
-** (magic, count, next, canary, chip id, status), then (t, value)
-** pairs from offset 0x18.
+** (magic, count, next, canary, chip id, status), then
+** (t, x, y, z) gyro records from offset 0x18.
 *)
 
 #include "share/atspre_staload.hats"
@@ -15,7 +15,7 @@
 #define MAGIC  1331057746 (* 0x4F565452, "RTVO" *)
 #define CANARY 1611526157 (* 0x600DF00D *)
 #define CHIPID 36         (* 0x24 *)
-#define NMAX   125        (* (1024 - 24) / 8 *)
+#define NMAX   126        (* (2048 - 24) / 16 *)
 
 (* ****** ****** *)
 
@@ -69,31 +69,47 @@ val _ = $extfcall (int, "printf", "status  %#04x      %s\n",
 val n = if count < NMAX then count else NMAX
 //
 fun loop
-  (inp: FILEref, i: int, n: int, mn: int, mx: int, sum: int): void =
+  (inp: FILEref, i: int, n: int,
+   mnx: int, mxx: int, sx: int,
+   mny: int, mxy: int, sy: int,
+   mnz: int, mxz: int, sz: int): void =
   if i >= n then (
     if n > 0 then let
-      val mean = g0int2float_int_double (sum) / g0int2float_int_double (n)
+      val nd = g0int2float_int_double (n)
       val _ = $extfcall (int, "printf",
-        "%d entries: min %d, max %d, mean %.1f LSB (%+.2f dps)\n",
-        n, mn, mx, mean, mean / 16.4)
+        "%d entries: x in [%d, %d] mean %+.2f dps; y in [%d, %d] mean %+.2f dps; z in [%d, %d] mean %+.2f dps\n",
+        n, mnx, mxx, g0int2float_int_double (sx) / nd / 16.4,
+        mny, mxy, g0int2float_int_double (sy) / nd / 16.4,
+        mnz, mxz, g0int2float_int_double (sz) / nd / 16.4)
     in end
   ) else let
     val t = rd_i32 (inp)
-    val v = rd_i32 (inp)
+    val x = rd_i32 (inp)
+    val y = rd_i32 (inp)
+    val z = rd_i32 (inp)
     val () =
       if (i < 5) orelse (i >= n - 2) then
         ignoret ($extfcall (int, "printf",
-          "[%3d] t=%6d  gyro_x=%6d  (%+8.2f dps)\n", i, t, v, dps (v)))
+          "[%3d] t=%6d  gyro={%6d, %6d, %6d}  (%+7.2f, %+7.2f, %+7.2f dps)\n",
+          i, t, x, y, z, dps (x), dps (y), dps (z)))
       else if i = 5 then ignoret ($extfcall (int, "printf", "  ...\n"))
       else ()
-    val mn = if v < mn then v else mn
-    val mx = if v > mx then v else mx
+    val mnx = if x < mnx then x else mnx
+    val mxx = if x > mxx then x else mxx
+    val mny = if y < mny then y else mny
+    val mxy = if y > mxy then y else mxy
+    val mnz = if z < mnz then z else mnz
+    val mxz = if z > mxz then z else mxz
   in
-    loop (inp, i + 1, n, mn, mx, sum + v)
+    loop (inp, i + 1, n, mnx, mxx, sx + x,
+          mny, mxy, sy + y, mnz, mxz, sz + z)
   end // end of [loop]
 //
 in
-  loop (inp, 0, n, 2147483647, ~2147483647, 0)
+  loop (inp, 0, n,
+    2147483647, ~2147483647, 0,
+    2147483647, ~2147483647, 0,
+    2147483647, ~2147483647, 0)
 end // end of [dump]
 
 (* ****** ****** *)

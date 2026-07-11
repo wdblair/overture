@@ -1,0 +1,5 @@
+abstype bad;
+typedef bad = { f : rate(int, (10, 0)) };
+sensor s : rate(int, (10, 0));
+actuator a : rate(int, (10, 0));
+a = s;

@@ -154,6 +154,28 @@ let
 tel
 ```
 
+## Record Payloads
+
+Flows may carry records. An `abstype` declares an abstract payload
+type; a `typedef` gives it storage as a record of scalars:
+
+```
+abstype vec3;
+typedef vec3 = { x : int, y : int, z : int };
+
+sensor gyro : rate(vec3, (10, 0));
+```
+
+Payload types never reach the constraint solver -- clocks, wcets,
+and the schedule certificate are oblivious to them. At the hardware
+seam a record crosses by reference: the generated ATS harness
+passes `&vec3` (an out-parameter `&vec3? >> vec3` for sensors and
+node results), and the C backend passes `vec3 *`, with the struct
+typedef emitted into every generated unit. An `abstype` without a
+typedef is reserved for storage defined on the C side; codegen
+rejects it for now. Delay lines (`fby`, `cons`) over record flows
+are not yet supported.
+
 ## The Clock Calculus
 
 Clock transformations are static functions of sort `clock`, applied

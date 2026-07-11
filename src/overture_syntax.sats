@@ -107,6 +107,8 @@ d0ec_node =
 | D0Csensor of (i0de, s0exp)
 | D0Cactuator of (i0de, s0exp)
 | D0Cfixity of (fixkind, int, list0(i0de))
+| D0Cabstype of i0de
+| D0Ctypedef of (i0de, list0(@(i0de, s0exp)))
 | D0Cnode of n0de
 | D0Ceqn of e0qn (* top-level equation driving an actuator *)
 // end of [d0ec_node]

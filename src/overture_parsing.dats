@@ -1013,6 +1013,44 @@ case+ tok.tok_node of
     d0ec_make (loc0, D0Cactuator (ide, typ))
   end
 //
+| TOKkw_abstype () => let
+    val ide = expect_ident (ps, "expected an abstype name")
+    val () = expect_semi (ps, "expected ';' after abstype declaration")
+  in
+    d0ec_make (loc0, D0Cabstype (ide))
+  end
+//
+| TOKkw_typedef () => let
+    val ide = expect_ident (ps, "expected a type name after 'typedef'")
+    val () = expect_eq (ps, "expected '=' in typedef")
+    val tok = pstate_next (ps)
+    val () = (
+      case+ tok.tok_node of
+      | TOKlbrace () => ()
+      | _ (*rest*) =>
+          (parse_fail (tok, "expected '{' to open a record"); exit (1))
+    ) : void
+    fun fields
+      (ps: pstate, acc: list0(@(i0de, s0exp))): list0(@(i0de, s0exp)) = let
+      val lab = expect_ident (ps, "expected a field label")
+      val () = expect_colon (ps, "expected ':' after the field label")
+      val typ = parse_s0exp (ps)
+      val acc = list0_cons (@(lab, typ), acc)
+      val tok = pstate_next (ps)
+    in
+      case+ tok.tok_node of
+      | TOKcomma () => fields (ps, acc)
+      | TOKrbrace () => list0_reverse (acc)
+      | _ (*rest*) => (
+          parse_fail (tok, "expected ',' or '}' in a record"); exit (1)
+        )
+    end // end of [fields]
+    val fs = fields (ps, list0_nil ())
+    val () = expect_semi (ps, "expected ';' after typedef")
+  in
+    d0ec_make (loc0, D0Ctypedef (ide, fs))
+  end
+//
 | TOKkw_infixl () => parse_fixity (ps, FIXleft (), loc0)
 | TOKkw_infixr () => parse_fixity (ps, FIXright (), loc0)
 | TOKkw_prefix () => parse_fixity (ps, FIXpre (), loc0)

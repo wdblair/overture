@@ -85,6 +85,16 @@ p2rog = '{
 
 fun trans12_program (decs: d0eclst): p2rog
 
+(*
+** the abstype registry: payload types declared abstract, given
+** storage either by an Overture typedef (fields below) or -- for
+** those with no typedef -- by a C definition at the firmware seam.
+** Field payloads are scalars: (label, is-bool).
+*)
+fun abstype_exists (sym: symbol): bool
+fun abstype_fields (sym: symbol): option0(list0(@(symbol, bool)))
+fun abstype_defs (): list0(@(symbol, list0(@(symbol, bool))))
+
 fun fprint_p2rog (out: FILEref, prog: p2rog): void
 
 (* ****** ****** *)
