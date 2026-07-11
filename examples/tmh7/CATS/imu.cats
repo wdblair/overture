@@ -34,6 +34,20 @@ bmi270_blob_byte (atstype_int i)
   return (atstype_int)bmi270_blob[i];
 }
 
+/* the calibration accumulator: running mean over the warmup */
+static int imu_cal_sx = 0, imu_cal_sy = 0, imu_cal_sz = 0, imu_cal_nn = 0;
+
+ATSinline()
+atstype_void
+imu_cal_add (atstype_int x, atstype_int y, atstype_int z)
+{
+  imu_cal_sx += x; imu_cal_sy += y; imu_cal_sz += z; imu_cal_nn += 1;
+}
+
+ATSinline() atstype_int imu_cal_x () { return imu_cal_sx / imu_cal_nn; }
+ATSinline() atstype_int imu_cal_y () { return imu_cal_sy / imu_cal_nn; }
+ATSinline() atstype_int imu_cal_z () { return imu_cal_sz / imu_cal_nn; }
+
 /* the LED toggle state: flipped on every actuation */
 static unsigned int imu_led_state = 0;
 

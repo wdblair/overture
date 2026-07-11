@@ -46,7 +46,11 @@ fn dps (v: int): double = g0int2float_int_double (v) / 16.4
 
 (* ****** ****** *)
 
-fn dump (inp: FILEref): void = let
+(* [still]: judge the post-warmup entries of an untouched board;
+   index 11 is the first fully calibrated recorder entry *)
+fn dump (inp: FILEref, still: bool): void = let
+//
+val warm = (if still then 11 else 0): int
 //
 val magic = rd_i32 (inp)
 val count = rd_i32 (inp)
@@ -66,6 +70,10 @@ val _ = $extfcall (int, "printf", "status  %#04x      %s\n",
   status,
   (if status mod 16 = 1 then "ok (init complete)" else "INIT FAILED"): string)
 //
+val hdrok =
+  (magic = MAGIC) andalso (canary = CANARY) andalso
+  (chipid = CHIPID) andalso (status mod 16 = 1) andalso (count = 100)
+//
 val n = if count < NMAX then count else NMAX
 //
 fun loop
@@ -74,14 +82,42 @@ fun loop
    mny: int, mxy: int, sy: int,
    mnz: int, mxz: int, sz: int): void =
   if i >= n then (
-    if n > 0 then let
-      val nd = g0int2float_int_double (n)
+    if n > warm then let
+      val m = n - warm
+      val nd = g0int2float_int_double (m)
       val _ = $extfcall (int, "printf",
         "%d entries: x in [%d, %d] mean %+.2f dps; y in [%d, %d] mean %+.2f dps; z in [%d, %d] mean %+.2f dps\n",
-        n, mnx, mxx, g0int2float_int_double (sx) / nd / 16.4,
+        m, mnx, mxx, g0int2float_int_double (sx) / nd / 16.4,
         mny, mxy, g0int2float_int_double (sy) / nd / 16.4,
         mnz, mxz, g0int2float_int_double (sz) / nd / 16.4)
+      val () =
+        if still then let
+          (* bias gone: |mean| <= 1 LSB; untouched: |v| <= 12 LSB *)
+          fn okmean (sv: int): bool =
+            (sv <= m) andalso (sv >= ~m)
+          fn okspan (mn: int, mx: int): bool =
+            (mn >= ~12) andalso (mx <= 12)
+          val calok =
+            okmean (sx) andalso okmean (sy) andalso okmean (sz)
+          val stillok =
+            okspan (mnx, mxx) andalso okspan (mny, mxy)
+            andalso okspan (mnz, mxz)
+        in
+          if hdrok andalso calok andalso stillok then
+            ignoret ($extfcall (int, "printf",
+              "still: PASS -- header ok, means within 1 LSB, no motion\n"))
+          else let
+            val _ = $extfcall (int, "printf",
+              "still: FAIL -- hdr %d cal %d still %d\n",
+              (if hdrok then 1 else 0): int,
+              (if calok then 1 else 0): int,
+              (if stillok then 1 else 0): int)
+          in
+            $extfcall (void, "exit", 1)
+          end
+        end // end of [if]
     in end
+    else (die ("no post-warmup entries"))
   ) else let
     val t = rd_i32 (inp)
     val x = rd_i32 (inp)
@@ -94,15 +130,19 @@ fun loop
           i, t, x, y, z, dps (x), dps (y), dps (z)))
       else if i = 5 then ignoret ($extfcall (int, "printf", "  ...\n"))
       else ()
-    val mnx = if x < mnx then x else mnx
-    val mxx = if x > mxx then x else mxx
-    val mny = if y < mny then y else mny
-    val mxy = if y > mxy then y else mxy
-    val mnz = if z < mnz then z else mnz
-    val mxz = if z > mxz then z else mxz
+    val keep = (i >= warm): bool
+    val mnx = if keep andalso (x < mnx) then x else mnx
+    val mxx = if keep andalso (x > mxx) then x else mxx
+    val mny = if keep andalso (y < mny) then y else mny
+    val mxy = if keep andalso (y > mxy) then y else mxy
+    val mnz = if keep andalso (z < mnz) then z else mnz
+    val mxz = if keep andalso (z > mxz) then z else mxz
+    val dx = (if keep then x else 0): int
+    val dy = (if keep then y else 0): int
+    val dz = (if keep then z else 0): int
   in
-    loop (inp, i + 1, n, mnx, mxx, sx + x,
-          mny, mxy, sy + y, mnz, mxz, sz + z)
+    loop (inp, i + 1, n, mnx, mxx, sx + dx,
+          mny, mxy, sy + dy, mnz, mxz, sz + dz)
   end // end of [loop]
 //
 in
@@ -120,9 +160,10 @@ implement main0 (argc, argv) =
   in
     case+ opt of
     | ~None_vt () => die ("cannot open the dump file")
-    | ~Some_vt (inp) => (dump (inp); fileref_close (inp))
+    | ~Some_vt (inp) =>
+        (dump (inp, (argc >= 3): bool); fileref_close (inp))
   end else
-    prerrln! ("usage: recdump <dump.bin>")
+    prerrln! ("usage: recdump <dump.bin> [still]")
   // end of [if]
 
 (* end of [recdump.dats] *)

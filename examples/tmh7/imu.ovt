@@ -12,8 +12,10 @@
      dfu-util -a 0 -s 0x24070000:2048:force -U rec.bin
      make recdump && ./recdump rec.bin
 
-   The LED heartbeat undersamples the record flow itself before
-   collapsing it to a scalar: (10,0) /^ 50 = (500,0). *)
+   The gyro bias is calibrated in-model: [calibrate] averages the
+   first 101 samples on an expiring clock, [hold] latches the final
+   estimate, and the recorder logs bias-corrected axes. The LED
+   heartbeat undersamples the record flow itself: /^ 50. *)
 
 abstype vec3;
 typedef vec3 = { x : int, y : int, z : int };
@@ -30,5 +32,17 @@ extern node magnitude {c: clock}
   (i : rate(vec3, c)) returns (o : rate(int, c))
   wcet 1;
 
-rec = latest(gyro /^ 10);
+(* boot-time calibration as dataflow: the node fires for its first
+   101 ticks only -- the certificate budgets it in the transient
+   prefix and proves it absent from the steady state -- and [hold]
+   latches the final bias estimate forever. *)
+extern node calibrate {c: clock}
+  (i : rate(vec3, c)) returns (o : rate(vec3, c for 101))
+  wcet 1;
+
+extern node subtract {c: clock}
+  (a : rate(vec3, c), b : rate(vec3, c)) returns (o : rate(vec3, c))
+  wcet 1;
+
+rec = latest(subtract(gyro, hold(calibrate(gyro))) /^ 10);
 led = magnitude(gyro /^ 50);

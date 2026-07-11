@@ -237,6 +237,17 @@ implement gyro_sense (t, v) = bmi_read_gyr (v)
 
 implement latest (i, r0) = r0 := i
 
+(* running mean of everything seen; the final firing's output is
+   the bias that [hold] serves forever *)
+implement calibrate (i, r0) = let
+  val () = imu_cal_add (i.x, i.y, i.z)
+in
+  r0 := @{x= imu_cal_x (), y= imu_cal_y (), z= imu_cal_z ()}
+end // end of [calibrate]
+
+implement subtract (a, b, r0) =
+  r0 := @{x= a.x - b.x, y= a.y - b.y, z= a.z - b.z}
+
 (* manhattan magnitude: cheap, monotone, sign-free *)
 implement magnitude (i) = let
   val ax = (if i.x < 0 then ~(i.x) else i.x): int

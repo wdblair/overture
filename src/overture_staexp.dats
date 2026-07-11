@@ -591,6 +591,8 @@ val the_cst_clk = ref<option0(s2cst)> (None0 ())
 val the_cst_over = ref<option0(s2cst)> (None0 ())
 val the_cst_under = ref<option0(s2cst)> (None0 ())
 val the_cst_shift = ref<option0(s2cst)> (None0 ())
+val the_cst_for = ref<option0(s2cst)> (None0 ())
+val the_cst_base = ref<option0(s2cst)> (None0 ())
 val the_cst_divides = ref<option0(s2cst)> (None0 ())
 val the_cst_strict = ref<option0(s2cst)> (None0 ())
 val the_cst_gated = ref<option0(s2cst)> (None0 ())
@@ -615,6 +617,8 @@ implement s2cst_clk () = cst_get (the_cst_clk)
 implement s2cst_over () = cst_get (the_cst_over)
 implement s2cst_under () = cst_get (the_cst_under)
 implement s2cst_shift () = cst_get (the_cst_shift)
+implement s2cst_for () = cst_get (the_cst_for)
+implement s2cst_base () = cst_get (the_cst_base)
 implement s2cst_divides () = cst_get (the_cst_divides)
 implement s2cst_strict () = cst_get (the_cst_strict)
 implement s2cst_gated () = cst_get (the_cst_gated)
@@ -631,6 +635,8 @@ implement s2cst_is_clk (s2c) = cst_is (the_cst_clk, s2c)
 implement s2cst_is_over (s2c) = cst_is (the_cst_over, s2c)
 implement s2cst_is_under (s2c) = cst_is (the_cst_under, s2c)
 implement s2cst_is_shift (s2c) = cst_is (the_cst_shift, s2c)
+implement s2cst_is_for (s2c) = cst_is (the_cst_for, s2c)
+implement s2cst_is_base (s2c) = cst_is (the_cst_base, s2c)
 
 (* ****** ****** *)
 
@@ -741,6 +747,10 @@ val cst_clk = mkcst ("clk", l2 (int, rat), clock)
 val cst_over = mkcst ("/", l2 (clock, int), clock)
 val cst_under = mkcst ("*", l2 (clock, int), clock)
 val cst_shift = mkcst ("shift", l2 (clock, rat), clock)
+(* expiring clocks: [c for k] fires k times then never again;
+   [base(c)] strips the expiration (identity on eternal clocks) *)
+val cst_for = mkcst ("for", l2 (clock, int), clock)
+val cst_base = mkcst ("base", l1 (clock), clock)
 //
 val _period = mkcst ("period", l1 (clock), int)
 val _date = mkcst ("date", l1 (clock), int)
@@ -782,6 +792,8 @@ val () = the_cst_clk[] := Some0 (cst_clk)
 val () = the_cst_over[] := Some0 (cst_over)
 val () = the_cst_under[] := Some0 (cst_under)
 val () = the_cst_shift[] := Some0 (cst_shift)
+val () = the_cst_for[] := Some0 (cst_for)
+val () = the_cst_base[] := Some0 (cst_base)
 val () = the_cst_divides[] := Some0 (cst_divides)
 val () = the_cst_strict[] := Some0 (cst_strict)
 val () = the_cst_gated[] := Some0 (cst_gated)
@@ -980,6 +992,35 @@ in
   mksig ("current", lv1 (a), lv1 (c), strue ()
   , lt2 (T2YPEvar (a), gt (T2YPEvar (a), v2exp (c)))
   , rt (T2YPEvar (a), v2exp (c)))
+end // end of [val]
+//
+// once : {a:type}{c:clock}
+//        (rate(a, c)) -> rate(a, c for 1)
+// (the first firing, then silence: value-level identity)
+//
+val () = let
+  val a = s2var_make (sym_a, S2RTtype ())
+  val c = s2var_make (sym_c, clock)
+  val resclk = app2 (cst_for, v2exp (c), s2exp_int (loc0, 1), clock)
+in
+  mksig ("once", lv1 (a), lv1 (c), strue ()
+  , lt1 (rt (T2YPEvar (a), v2exp (c)))
+  , rt (T2YPEvar (a), resclk))
+end // end of [val]
+//
+// hold : {a:type}{c:clock}
+//        (rate(a, c)) -> rate(a, base(c))
+// (latches the last value past the expiration; on an eternal
+//  clock base is the identity and hold is a plain copy)
+//
+val () = let
+  val a = s2var_make (sym_a, S2RTtype ())
+  val c = s2var_make (sym_c, clock)
+  val resclk = app1 (cst_base, v2exp (c), clock)
+in
+  mksig ("hold", lv1 (a), lv1 (c), strue ()
+  , lt1 (rt (T2YPEvar (a), v2exp (c)))
+  , rt (T2YPEvar (a), resclk))
 end // end of [val]
 //
 in

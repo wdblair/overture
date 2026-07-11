@@ -176,6 +176,38 @@ typedef is reserved for storage defined on the C side; codegen
 rejects it for now. Delay lines (`fby`, `cons`) over record flows
 are not yet supported.
 
+## Expiring Clocks
+
+A clock may carry an expiration: `c for k` fires on `c`'s first `k`
+dates and then never again -- a timer with a bounded number of
+re-arms, where ordinary clocks re-arm forever. The count is a
+constant, so the statics stay linear: internally the expiration is
+the absolute date `d + k*n`, the same lowering trick that keeps
+rational phases solver-friendly. Sampling transformations preserve
+the expiration; expiring and eternal clocks never unify. Two
+builtins connect the worlds:
+
+```
+once : {a: type}{c: clock} (rate(a, c)) -> rate(a, c for 1)
+hold : {a: type}{c: clock} (rate(a, c)) -> rate(a, base(c))
+```
+
+`once` keeps the first firing; `hold` latches the last value a flow
+ever produced -- past the expiration, forever. The executive wraps
+logical time past every expiration, so expired flows cost nothing
+at runtime, and the schedule certificate budgets them only in the
+slots where they fire: initialization work is proven present in
+the startup transient and proven absent from the steady state.
+Boot-time sensor calibration is the motivating pattern:
+
+```
+extern node calibrate {c: clock}
+  (i : rate(vec3, c)) returns (o : rate(vec3, c for 101))
+  wcet 1;
+
+rec = latest(subtract(gyro, hold(calibrate(gyro))) /^ 10);
+```
+
 ## The Clock Calculus
 
 Clock transformations are static functions of sort `clock`, applied

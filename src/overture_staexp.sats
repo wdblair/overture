@@ -173,6 +173,8 @@ fun s2cst_clk (): s2cst      (* clk : (int, rat) -> clock *)
 fun s2cst_over (): s2cst     (* / : (clock, int) -> clock, period/k *)
 fun s2cst_under (): s2cst    (* * : (clock, int) -> clock, period*k *)
 fun s2cst_shift (): s2cst    (* shift : (clock, rat) -> clock *)
+fun s2cst_for (): s2cst      (* for : (clock, int) -> clock, k firings *)
+fun s2cst_base (): s2cst     (* base : clock -> clock, strip expiration *)
 fun s2cst_divides (): s2cst  (* | : (int, int) -> bool *)
 
 (*
@@ -184,6 +186,8 @@ fun s2cst_is_clk (s2c: s2cst): bool
 fun s2cst_is_over (s2c: s2cst): bool
 fun s2cst_is_under (s2c: s2cst): bool
 fun s2cst_is_shift (s2c: s2cst): bool
+fun s2cst_is_for (s2c: s2cst): bool
+fun s2cst_is_base (s2c: s2cst): bool
 
 (*
 ** the built-in term-level operators, as node signatures:
