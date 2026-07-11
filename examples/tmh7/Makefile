@@ -175,6 +175,19 @@ imu: imu-ats.bin
 flash-imu: imu-ats.bin
 	$(DFU) -a 0 -s 0x08000000:leave -D imu-ats.bin
 
+# ---- stillness test: fly with the board untouched; after the
+# ---- 101-sample calibration warmup, the recorder must show
+# ---- per-axis means within 1 LSB and no excursion past 12 LSB.
+# ---- recdump's exit code is the verdict.
+
+hil-still: imu-ats.bin recdump
+	$(DFU) -a 0 -s 0x08000000:leave -D imu-ats.bin || true
+	@echo "hil-still: flying -- keep the board untouched"
+	sleep 20
+	rm -f rec.bin
+	$(DFU) -a 0 -s 0x24070000:2048:force -U rec.bin
+	./recdump rec.bin still
+
 # ---- hardware in the loop: flash the IMU experiment, let it fly,
 # ---- read the recorder back over DFU, decode. The board must
 # ---- start in DFU (hold BOOT, replug); it lands back in DFU by
@@ -197,4 +210,4 @@ clean:
 	      imu_cells.sats imu-ats.elf imu-ats.bin recdump rec.bin \
 	      overture_sched.sats overture_sched.dats overture_sched_bare.*
 
-.PHONY: all ats certify flash flash-ats imu flash-imu hil clean
+.PHONY: all ats certify flash flash-ats imu flash-imu hil hil-still clean

@@ -1,0 +1,12 @@
+sensor s : rate(int, (10, 0));
+actuator a : rate(int, (10, 0));
+
+extern node warmup {c: clock}
+  (i : rate(int, c)) returns (o : rate(int, c for 5))
+  wcet 1;
+
+extern node subtract {c: clock}
+  (x : rate(int, c), y : rate(int, c)) returns (o : rate(int, c))
+  wcet 1;
+
+a = subtract(s, hold(warmup(s)));

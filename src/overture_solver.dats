@@ -244,7 +244,7 @@ datatype lfres =
 | LFerr of (location, string)
 
 datatype clres =
-| CLok of (lf(*period*), lf(*date*))
+| CLok of (lf(*period*), lf(*date*), option0(lf)(*expiration date*))
 | CLerr of (location, string)
 
 extern fun lower_num (ctx: lowctx, s2e: s2exp): lfres
@@ -317,13 +317,13 @@ case+ s2e.s2e_node of
     | list0_cons (c, list0_nil ())
         when name = "period" => (
         case+ lower_clk (ctx, c) of
-        | CLok (prd, _) => LFok (prd)
+        | CLok (prd, _, _) => LFok (prd)
         | CLerr (e0, e1) => LFerr (e0, e1)
       )
     | list0_cons (c, list0_nil ())
         when name = "date" => (
         case+ lower_clk (ctx, c) of
-        | CLok (_, dat) => LFok (dat)
+        | CLok (_, dat, _) => LFok (dat)
         | CLerr (e0, e1) => LFerr (e0, e1)
       )
     | _ (*rest*) => LFerr (loc, "uninterpreted static operation")
@@ -344,7 +344,7 @@ case+ s2e.s2e_node of
     | S2RTclock () => let
         val nd = ivars_of_clock_svar (ctx, s2v)
       in
-        CLok (lf_ivar (nd.0), lf_ivar (nd.1))
+        CLok (lf_ivar (nd.0), lf_ivar (nd.1), None0 ())
       end
     | _ (*rest*) => CLerr (loc, "expected a clock variable")
   )
@@ -359,51 +359,83 @@ case+ s2e.s2e_node of
             case+ (lower_num (ctx, a1), lower_num (ctx, a2)) of
             | (LFok fn_, LFok fp) =>
                 if lf_is_const (fp)
-                  then CLok (fn_, lf_scale (fn_, fp.lf_c, fp.lf_den))
+                  then CLok (fn_, lf_scale (fn_, fp.lf_c, fp.lf_den), None0 ())
                 else if lf_is_const (fn_)
-                  then CLok (fn_, lf_scale (fp, fn_.lf_c, fn_.lf_den))
+                  then CLok (fn_, lf_scale (fp, fn_.lf_c, fn_.lf_den), None0 ())
                 else CLerr (loc,
                   "nonlinear clock: period or phase must be a constant")
             | (LFerr (l0, m0), _) => CLerr (l0, m0)
             | (_, LFerr (l0, m0)) => CLerr (l0, m0)
           )
         | _ when s2cst_is_over (s2c) => (
-            (* dates are invariant: (n/k, d) *)
+            (* dates are invariant: (n/k, d); expirations too *)
             case+ (lower_clk (ctx, a1), lower_num (ctx, a2)) of
-            | (CLok (prd, dat), LFok fk) =>
+            | (CLok (prd, dat, ex), LFok fk) =>
                 if lf_is_const (fk) then (
                   if fk.lf_c = 0
                     then CLerr (loc, "clock division by zero")
-                    else CLok (lf_scale (prd, fk.lf_den, fk.lf_c), dat)
+                    else CLok (lf_scale (prd, fk.lf_den, fk.lf_c), dat, ex)
                 ) else CLerr (loc,
                   "nonlinear clock: the sampling factor must be a constant")
             | (CLerr (l0, m0), _) => CLerr (l0, m0)
             | (_, LFerr (l0, m0)) => CLerr (l0, m0)
           )
         | _ when s2cst_is_under (s2c) => (
-            (* (n*k, d) *)
+            (* (n*k, d); expirations invariant *)
             case+ (lower_clk (ctx, a1), lower_num (ctx, a2)) of
-            | (CLok (prd, dat), LFok fk) =>
+            | (CLok (prd, dat, ex), LFok fk) =>
                 if lf_is_const (fk)
-                  then CLok (lf_scale (prd, fk.lf_c, fk.lf_den), dat)
+                  then CLok (lf_scale (prd, fk.lf_c, fk.lf_den), dat, ex)
                 else CLerr (loc,
                   "nonlinear clock: the sampling factor must be a constant")
             | (CLerr (l0, m0), _) => CLerr (l0, m0)
             | (_, LFerr (l0, m0)) => CLerr (l0, m0)
           )
         | _ when s2cst_is_shift (s2c) => (
-            (* (n, d + n * k) *)
+            (* (n, d + n*k); the expiration shifts with the dates *)
             case+ (lower_clk (ctx, a1), lower_num (ctx, a2)) of
-            | (CLok (prd, dat), LFok fk) =>
-                if lf_is_const (fk)
-                  then CLok
-                    (prd, lf_add (dat, lf_scale (prd, fk.lf_c, fk.lf_den)))
+            | (CLok (prd, dat, ex), LFok fk) =>
+                if lf_is_const (fk) then let
+                  val mv = lf_scale (prd, fk.lf_c, fk.lf_den)
+                  val ex2 = (
+                    case+ ex of
+                    | Some0 (e) => Some0 (lf_add (e, mv))
+                    | None0 () => None0 ()
+                  ) : option0 (lf)
+                in
+                  CLok (prd, lf_add (dat, mv), ex2)
+                end
                 else CLerr (loc,
                   "nonlinear clock: the shift amount must be a constant")
             | (CLerr (l0, m0), _) => CLerr (l0, m0)
             | (_, LFerr (l0, m0)) => CLerr (l0, m0)
           )
+        | _ when s2cst_is_for (s2c) => (
+            (* k firings from the date: expiration e = d + k*n *)
+            case+ (lower_clk (ctx, a1), lower_num (ctx, a2)) of
+            | (CLok (prd, dat, ex), LFok fk) => (
+                case+ ex of
+                | Some0 _ => CLerr (loc, "the clock is already expiring")
+                | None0 () =>
+                    if lf_is_const (fk) then (
+                      if fk.lf_c <= 0
+                        then CLerr (loc, "a clock must fire at least once")
+                        else CLok (prd, dat, Some0 (lf_add (dat,
+                          lf_scale (prd, fk.lf_c, fk.lf_den))))
+                    ) else CLerr (loc,
+                      "nonlinear clock: the firing count must be a constant")
+              )
+            | (CLerr (l0, m0), _) => CLerr (l0, m0)
+            | (_, LFerr (l0, m0)) => CLerr (l0, m0)
+          )
         | _ (*rest*) => CLerr (loc, "uninterpreted clock operation")
+      )
+    | list0_cons (a1, list0_nil ())
+        when s2cst_is_base (s2c) => (
+        (* strip the expiration; identity on eternal clocks *)
+        case+ lower_clk (ctx, a1) of
+        | CLok (prd, dat, _) => CLok (prd, dat, None0 ())
+        | CLerr (l0, m0) => CLerr (l0, m0)
       )
     | _ (*rest*) => CLerr (loc, "uninterpreted clock operation")
   end
@@ -489,11 +521,18 @@ case+ s2e.s2e_node of
             | S2RTclock () => (
                 (* clock equality: periods and dates *)
                 case+ (lower_clk (ctx, l), lower_clk (ctx, r)) of
-                | (CLok (n1, d1), CLok (n2, d2)) => (
+                | (CLok (n1, d1, e1), CLok (n2, d2, e2)) => (
                     case+ name of
-                    | "==" =>
-                        list0_append
+                    | "==" => let
+                        val base = list0_append
                           (relvec ("==", n1, n2), relvec ("==", d1, d2))
+                      in
+                        case+ (e1, e2) of
+                        | (Some0 (x1), Some0 (x2)) =>
+                            list0_append (base, relvec ("==", x1, x2))
+                        | (None0 (), None0 ()) => base
+                        | (_, _) => base (* mismatch surfaces at the goal *)
+                      end
                     | "!=" => let
                         val b1 = ICLconj (relvec ("!=", n1, n2))
                         val b2 = ICLconj (relvec ("!=", d1, d2))
@@ -1059,10 +1098,11 @@ case+ s2e.s2e_node of
         case+ l.s2e_srt of
         | S2RTclock () => (
             case+ (lower_clk (ctx, l), lower_clk (ctx, r)) of
-            | (CLok (n1, d1), CLok (n2, d2)) => (
+            | (CLok (n1, d1, _), CLok (n2, d2, _)) => (
                 case+ name of
                 | "==" => let
-                    (* neg: periods differ or dates differ *)
+                    (* neg: periods differ or dates differ; expirations
+                       are checked structurally at the goal site *)
                     val b1 = ICLconj (relvec ("!=", n1, n2))
                     val b2 = ICLconj (relvec ("!=", d1, d2))
                   in
@@ -1171,7 +1211,7 @@ case+ s2e.s2e_node of
           (case+ l.s2e_srt of S2RTclock () => true | _ => false) => (
         (* split clock equality for better messages *)
         case+ (lower_clk (ctx, l), lower_clk (ctx, r)) of
-        | (CLok (n1, d1), CLok (n2, d2)) => let
+        | (CLok (n1, d1, e1), CLok (n2, d2, e2)) => let
             fn chk
               (what: string, f1: lf, f2: lf): void = let
               val negs = relvec ("!=", f1, f2)
@@ -1181,8 +1221,15 @@ case+ s2e.s2e_node of
                 else report_unsolved (c3t, s2e, origs, what)
             end
             val () = chk ("the periods differ", n1, n2)
+            val () = chk ("the phases differ", d1, d2)
           in
-            chk ("the phases differ", d1, d2)
+            case+ (e1, e2) of
+            | (Some0 (x1), Some0 (x2)) => chk ("the expirations differ", x1, x2)
+            | (None0 (), None0 ()) => ()
+            | (Some0 _, None0 ()) => report_unsolved (c3t, s2e, origs,
+                "an expiring clock cannot equal an eternal one")
+            | (None0 (), Some0 _) => report_unsolved (c3t, s2e, origs,
+                "an eternal clock cannot equal an expiring one")
           end
         | (CLerr (l0, w), _) => report_unsolved (c3t, s2e, origs, w)
         | (_, CLerr (l0, w)) => report_unsolved (c3t, s2e, origs, w)

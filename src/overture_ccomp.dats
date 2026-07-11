@@ -42,7 +42,7 @@ fn str3
 fn cgerr (msg: string): void = errmsg_noloc (msg)
 
 extern fun eval_rat (s2e: s2exp): @(int, int) (* (a, b), b >= 1 *)
-extern fun eval_clk (s2e: s2exp): @(int, int) (* (period, date) *)
+extern fun eval_clk (s2e: s2exp): @(int, int, int) (* (period, date, expiration; ~1 eternal) *)
 
 implement
 eval_rat (s2e) = let
@@ -136,20 +136,20 @@ case+ s2e.s2e_node of
               end else (n * p.0) / p.1
             ) : int
           in
-            @(n, d)
+            @(n, d, ~1)
           end
         | _ when s2cst_is_over (s2c) => let
             val nd = eval_clk (a1)
             val k = eval_int (a2)
           in
-            if k = 0 then (cgerr ("codegen: clock division by zero"); @(1, 0))
-            else @(nd.0 / k, nd.1)
+            if k = 0 then (cgerr ("codegen: clock division by zero"); @(1, 0, ~1))
+            else @(nd.0 / k, nd.1, nd.2)
           end
         | _ when s2cst_is_under (s2c) => let
             val nd = eval_clk (a1)
             val k = eval_int (a2)
           in
-            @(nd.0 * k, nd.1)
+            @(nd.0 * k, nd.1, nd.2)
           end
         | _ when s2cst_is_shift (s2c) => let
             val nd = eval_clk (a1)
@@ -163,24 +163,38 @@ case+ s2e.s2e_node of
               end else (nd.0 * k.0) / k.1
             ) : int
           in
-            @(nd.0, nd.1 + s)
+            @(nd.0, nd.1 + s, (if nd.2 >= 0 then nd.2 + s else nd.2): int)
+          end
+        | _ when s2cst_is_for (s2c) => let
+            val nd = eval_clk (a1)
+            val k = eval_int (a2)
+          in
+            if k <= 0 then (cgerr ("codegen: a clock must fire at least once"); @(1, 0, ~1))
+            else if nd.2 >= 0 then (cgerr ("codegen: the clock is already expiring"); nd)
+            else @(nd.0, nd.1, nd.1 + k * nd.0)
           end
         | _ (*rest*) => let
             val () = cgerr ("codegen: cannot evaluate a clock expression")
           in
-            @(1, 0)
+            @(1, 0, ~1)
           end
       )
+    | list0_cons (a1, list0_nil ())
+        when s2cst_is_base (s2c) => let
+        val nd = eval_clk (a1)
+      in
+        @(nd.0, nd.1, ~1)
+      end
     | _ (*rest*) => let
         val () = cgerr ("codegen: cannot evaluate a clock expression")
       in
-        @(1, 0)
+        @(1, 0, ~1)
       end
   end
 | _ (*rest*) => let
     val () = cgerr ("codegen: unbound clock variable (internal)")
   in
-    @(1, 0)
+    @(1, 0, ~1)
   end
 ) (* end of [eval_clk] *)
 
@@ -296,6 +310,7 @@ end // end of [emit_rec_zero_ats]
 
 typedef cell = '{
   c_id= int, c_pay= cpay, c_n= int, c_d= int
+, c_e= int (* expiration date; ~1 = eternal *)
 } (* end of [cell] *)
 
 datatype fval =
@@ -342,6 +357,7 @@ datatype action =
 | ACTbufwrite of (cell(*in*), buf)
 | ACTbufread of (buf, cell(*out*))
 | ACTcurrent of (int(*v0*), cell(*value*), cell(*presence*), cell(*out*))
+| ACThold of (cell(*in: its own, possibly expiring, clock*), cell(*out: latched*))
 | ACTactuate of (string, cell)
 | ACTactuate_gated of (string, cell(*value*), cell(*presence*))
 // end of [action]
@@ -360,7 +376,7 @@ ccctx = '{
 , x_senses= ref (list0(@(string, cpay)))
 , x_acts= ref (list0(@(string, cpay)))
 , x_calls= ref (list0(@(string, list0(cpay)(*args*), list0(cpay)(*outs*))))
-, x_tasks= ref (list0(@(string, int(*n*), int(*d*), int(*wcet*))))
+, x_tasks= ref (list0(@(string, int(*n*), int(*d*), int(*wcet*), int(*e*))))
 , x_nodes= list0 (n2ode)
 } (* end of [ccctx] *)
 
@@ -376,7 +392,7 @@ fn ctx_new
 , x_senses= ref<list0(@(string, cpay))> (list0_nil ())
 , x_acts= ref<list0(@(string, cpay))> (list0_nil ())
 , x_calls= ref<list0(@(string, list0(cpay), list0(cpay)))> (list0_nil ())
-, x_tasks= ref<list0(@(string, int, int, int))> (list0_nil ())
+, x_tasks= ref<list0(@(string, int, int, int, int))> (list0_nil ())
 , x_nodes= nodes
 } (* end of [ctx_new] *)
 
@@ -389,8 +405,8 @@ in
 end // end of [ctx_id]
 
 fn cell_new
-  (ctx: ccctx, pay: cpay, n: int, d: int): cell = let
-  val c = '{ c_id= ctx_id (ctx), c_pay= pay, c_n= n, c_d= d } : cell
+  (ctx: ccctx, pay: cpay, n: int, d: int, e: int): cell = let
+  val c = '{ c_id= ctx_id (ctx), c_pay= pay, c_n= n, c_d= d, c_e= e } : cell
   val r = ctx.x_cells
   val () = !r := list0_cons (c, !r)
 in
@@ -401,7 +417,7 @@ fn state_new
   (ctx: ccctx, pay: cpay): cell = let
   val () = if cpay_isrec (pay) then cgerr
     ("codegen: fby/current registers over record flows are not yet supported")
-  val c = '{ c_id= ctx_id (ctx), c_pay= pay, c_n= 1, c_d= 0 } : cell
+  val c = '{ c_id= ctx_id (ctx), c_pay= pay, c_n= 1, c_d= 0, c_e= ~1 } : cell
   val r = ctx.x_states
   val () = !r := list0_cons (c, !r)
 in
@@ -488,7 +504,7 @@ fn fval_presence
 (
   case+ fv of
   | FVgated (_, p) => p
-  | _ (*rest*) => '{ c_id= 0, c_pay= CPbool (), c_n= 1, c_d= 0 }
+  | _ (*rest*) => '{ c_id= 0, c_pay= CPbool (), c_n= 1, c_d= 0, c_e= ~1 }
 ) (* end of [fval_presence] *)
 
 fn fval_cell
@@ -499,7 +515,7 @@ fn fval_cell
   | _ (*rest*) => let
       val () = cgerr (str3 ("codegen: expected a flow value in ", what, ""))
     in
-      '{ c_id= 0, c_pay= CPint (), c_n= 1, c_d= 0 }
+      '{ c_id= 0, c_pay= CPint (), c_n= 1, c_d= 0, c_e= ~1 }
     end
 ) (* end of [fval_cell] *)
 
@@ -767,7 +783,8 @@ fn delay_line
 ) : cell = let
   val depth = s / inc.c_n + 1
   val b = buf_new (ctx, inc.c_pay, depth)
-  val out = cell_new (ctx, inc.c_pay, inc.c_n, inc.c_d + s)
+  val out = cell_new (ctx, inc.c_pay, inc.c_n, inc.c_d + s,
+    (if inc.c_e >= 0 then inc.c_e + s else inc.c_e): int)
   val () = emit_strict (ctx, ACTbufwrite (inc, b))
   val () = emit_strict (ctx, ACTbufread (b, out))
 in
@@ -836,7 +853,7 @@ case+ name of
     | list0_cons (f, list0_cons (FVint (k), list0_nil ())) => let
         val c = fval_cell (f, name)
         val n2 = (if name = "*^" then c.c_n / k else c.c_n * k): int
-        val out = cell_new (ctx, c.c_pay, n2, c.c_d)
+        val out = cell_new (ctx, c.c_pay, n2, c.c_d, c.c_e)
         val () = emit_strict (ctx, ACTcopy (FVcell (c), out))
       in
         list0_cons (FVcell (out), list0_nil ())
@@ -893,7 +910,7 @@ case+ name of
     | list0_cons (FVint (v0), list0_cons (f, list0_nil ())) => let
         val c = fval_cell (f, "fby")
         val st = state_new (ctx, c.c_pay)
-        val out = cell_new (ctx, c.c_pay, c.c_n, c.c_d)
+        val out = cell_new (ctx, c.c_pay, c.c_n, c.c_d, c.c_e)
         val () = emit_pre (ctx, ACTfbyemit (v0, st, out))
         val () = emit_post (ctx, ACTfbystore (c, st))
       in
@@ -910,7 +927,7 @@ case+ name of
     case+ fvs of
     | list0_cons (FVint (v0), list0_cons (f, list0_nil ())) => let
         val c = fval_cell (f, "cons")
-        val out = cell_new (ctx, c.c_pay, c.c_n, c.c_d - c.c_n)
+        val out = cell_new (ctx, c.c_pay, c.c_n, c.c_d - c.c_n, c.c_e)
         val () = emit_strict (ctx, ACTconsemit (v0, c, out))
       in
         list0_cons (FVcell (out), list0_nil ())
@@ -928,8 +945,8 @@ case+ name of
     | list0_cons (f, list0_cons (b, list0_nil ())) => let
         val cf = fval_cell (f, "when")
         val cb = fval_cell (b, "when")
-        val vout = cell_new (ctx, cf.c_pay, cf.c_n, cf.c_d)
-        val pout = cell_new (ctx, CPbool (), cf.c_n, cf.c_d)
+        val vout = cell_new (ctx, cf.c_pay, cf.c_n, cf.c_d, cf.c_e)
+        val pout = cell_new (ctx, CPbool (), cf.c_n, cf.c_d, cf.c_e)
         val () = emit_strict (ctx, ACTcopy (FVcell (cf), vout))
         val () = emit_strict (ctx, ACTcopy (FVcell (cb), pout))
       in
@@ -948,7 +965,7 @@ case+ name of
     | list0_cons (FVint (v0), list0_cons (g, list0_nil ())) => (
         case+ g of
         | FVgated (v, p) => let
-            val out = cell_new (ctx, v.c_pay, v.c_n, v.c_d)
+            val out = cell_new (ctx, v.c_pay, v.c_n, v.c_d, v.c_e)
             val () = emit_strict (ctx, ACTcurrent (v0, v, p, out))
           in
             list0_cons (FVcell (out), list0_nil ())
@@ -966,12 +983,47 @@ case+ name of
       end
   )
 //
+| "once" => (
+    (* the first firing only: a copy onto a one-shot clock *)
+    case+ fvs of
+    | list0_cons (f, list0_nil ()) => let
+        val c = fval_cell (f, "once")
+        val out = cell_new (ctx, c.c_pay, c.c_n, c.c_d, c.c_d + c.c_n)
+        val () = emit_strict (ctx, ACTcopy (FVcell (c), out))
+      in
+        list0_cons (FVcell (out), list0_nil ())
+      end
+    | _ (*rest*) => let
+        val () = cgerr ("codegen: bad arguments to [once]")
+      in
+        list0_cons (FVint (0), list0_nil ())
+      end
+  )
+//
+| "hold" => (
+    (* latch every firing; past the expiration the register keeps
+       the last value forever *)
+    case+ fvs of
+    | list0_cons (f, list0_nil ()) => let
+        val c = fval_cell (f, "hold")
+        val out = cell_new (ctx, c.c_pay, c.c_n, c.c_d, ~1)
+        val () = emit_strict (ctx, ACThold (c, out))
+      in
+        list0_cons (FVcell (out), list0_nil ())
+      end
+    | _ (*rest*) => let
+        val () = cgerr ("codegen: bad arguments to [hold]")
+      in
+        list0_cons (FVint (0), list0_nil ())
+      end
+  )
+//
 | "merge" => (
     case+ fvs of
     | list0_cons (b, list0_cons (x, list0_cons (y, list0_nil ()))) => let
         val cb = fval_cell (b, "merge")
         val cx = fval_cell (x, "merge")
-        val out = cell_new (ctx, cx.c_pay, cx.c_n, cx.c_d)
+        val out = cell_new (ctx, cx.c_pay, cx.c_n, cx.c_d, cx.c_e)
         (* out := if b then x else y, at the common clock *)
         val () = emit_strict (ctx, ACTcall ("%merge",
           list0_cons (FVcell (cb),
@@ -1027,17 +1079,17 @@ fun outcells
                 ("codegen: gated flows on extern node [", name,
                  "] are not supported yet"))
             in
-              cell_new (ctx, CPint (), 1, 0)
+              cell_new (ctx, CPint (), 1, 0, ~1)
             end else let
               val nd = eval_clk (clk)
             in
-              cell_new (ctx, t2ype_cpay (elt, bp.1), nd.0, nd.1)
+              cell_new (ctx, t2ype_cpay (elt, bp.1), nd.0, nd.1, nd.2)
             end
         | _ (*rest*) => let
             val () = cgerr (str3
               ("codegen: extern node [", name, "] must return flows"))
           in
-            cell_new (ctx, CPint (), 1, 0)
+            cell_new (ctx, CPint (), 1, 0, ~1)
           end
       ) : cell
     in
@@ -1077,7 +1129,7 @@ val () = (
       ) : int
       val r = ctx.x_tasks
     in
-      !r := list0_cons (@(name, o0.c_n, o0.c_d, w), !r)
+      !r := list0_cons (@(name, o0.c_n, o0.c_d, w, o0.c_e), !r)
     end
   | list0_nil () => ()
 ) : void // end of [val]
@@ -1144,17 +1196,17 @@ fun mkcells
         case+ t2p of
         | T2YPErate (knd, elt, clk) => let
             val nd = eval_clk (clk)
-            val v = cell_new (ctx, t2ype_cpay (elt, bp.1), nd.0, nd.1)
+            val v = cell_new (ctx, t2ype_cpay (elt, bp.1), nd.0, nd.1, nd.2)
           in
             if eval_gated (knd) then
-              FVgated (v, cell_new (ctx, CPbool (), nd.0, nd.1))
+              FVgated (v, cell_new (ctx, CPbool (), nd.0, nd.1, nd.2))
             else FVcell (v)
           end
         | _ (*rest*) => let
             val () = cgerr (str3
               ("codegen: flow of node [", name, "] must carry a rate type"))
           in
-            FVcell (cell_new (ctx, CPint (), 1, 0))
+            FVcell (cell_new (ctx, CPint (), 1, 0, ~1))
           end
       ) : fval
       val r = mkcells (d2vs, env)
@@ -1279,8 +1331,11 @@ fn emit_fval
 ) (* end of [emit_fval] *)
 
 fn emit_fire
-  (out: FILEref, n: int, d: int): void =
-  fprint! (out, "if fire (t, ", n, ", ", d, ") then ")
+  (out: FILEref, n: int, d: int, e: int): void =
+  if e >= 0
+    then fprint! (out,
+      "if (fire (t, ", n, ", ", d, ")) andalso (t < ", e, ") then ")
+    else fprint! (out, "if fire (t, ", n, ", ", d, ") then ")
 
 fn emit_action
   (out: FILEref, a: action): void =
@@ -1288,7 +1343,7 @@ fn emit_action
 case+ a of
 //
 | ACTsense (name, c) => let
-    val () = emit_fire (out, c.c_n, c.c_d)
+    val () = emit_fire (out, c.c_n, c.c_d, c.c_e)
   in
     if cpay_isrec (c.c_pay) then let
       val ty = ctystr (c.c_pay)
@@ -1305,7 +1360,7 @@ case+ a of
         case+ (args, outs) of
         | (list0_cons (b, list0_cons (x, list0_cons (y, list0_nil ()))),
            list0_cons (o, list0_nil ())) => let
-            val () = emit_fire (out, o.c_n, o.c_d)
+            val () = emit_fire (out, o.c_n, o.c_d, o.c_e)
             val () = fprint! (out, "!c", o.c_id, " := (if ")
             val () = emit_fval (out, b)
             val () = fprint! (out, " then ")
@@ -1322,7 +1377,7 @@ case+ a of
         | list0_cons (o0, list0_nil ())
             when fvals_anyrec (args) orelse cpay_isrec (o0.c_pay) => let
             (* records travel by reference through var temporaries *)
-            val () = emit_fire (out, o0.c_n, o0.c_d)
+            val () = emit_fire (out, o0.c_n, o0.c_d, o0.c_e)
             val () = fprint! (out, "let ")
             val _ = list0_iforeach<fval> (args
             , lam (i, fv) =<cloref1> let
@@ -1366,7 +1421,7 @@ case+ a of
             fprint! (out, " end")
           end
         | list0_cons (o0, list0_nil ()) => let
-            val () = emit_fire (out, o0.c_n, o0.c_d)
+            val () = emit_fire (out, o0.c_n, o0.c_d, o0.c_e)
             val () = fprint! (out, "!c", o0.c_id, " := ", name, " (")
             fun loop (args: list0(fval), first: bool): void =
               case+ args of
@@ -1386,7 +1441,7 @@ case+ a of
             cgerr (str3 ("codegen: record flows through multi-output",
               " extern node [", name))
         | list0_cons (o0, _) => let
-            val () = emit_fire (out, o0.c_n, o0.c_d)
+            val () = emit_fire (out, o0.c_n, o0.c_d, o0.c_e)
             val () = fprint! (out, "let val (")
             fun routs (outs: list0(cell), i: int): void =
               case+ outs of
@@ -1428,14 +1483,14 @@ case+ a of
   )
 //
 | ACTcopy (fv, o) => let
-    val () = emit_fire (out, o.c_n, o.c_d)
+    val () = emit_fire (out, o.c_n, o.c_d, o.c_e)
     val () = fprint! (out, "!c", o.c_id, " := ")
   in
     emit_fval (out, fv)
   end
 //
 | ACTfbyemit (v0, st, o) => let
-    val () = emit_fire (out, o.c_n, o.c_d)
+    val () = emit_fire (out, o.c_n, o.c_d, o.c_e)
     val () = fprint!
       (out, "!c", o.c_id, " := (if t = ", o.c_d, " then ")
     val () =
@@ -1445,13 +1500,13 @@ case+ a of
   end
 //
 | ACTfbystore (i, st) => let
-    val () = emit_fire (out, i.c_n, i.c_d)
+    val () = emit_fire (out, i.c_n, i.c_d, i.c_e)
   in
     fprint! (out, "!c", st.c_id, " := !c", i.c_id)
   end
 //
 | ACTconsemit (v0, i, o) => let
-    val () = emit_fire (out, o.c_n, o.c_d)
+    val () = emit_fire (out, o.c_n, o.c_d, o.c_e)
     val () = fprint!
       (out, "!c", o.c_id, " := (if t = ", o.c_d, " then ")
     val () =
@@ -1461,7 +1516,7 @@ case+ a of
   end
 //
 | ACTbufwrite (i, b) => let
-    val () = emit_fire (out, i.c_n, i.c_d)
+    val () = emit_fire (out, i.c_n, i.c_d, i.c_e)
   in
     fprint! (out,
       "(b", b.b_id, "[!b", b.b_id, "_w] := !c", i.c_id,
@@ -1469,7 +1524,7 @@ case+ a of
   end
 //
 | ACTbufread (b, o) => let
-    val () = emit_fire (out, o.c_n, o.c_d)
+    val () = emit_fire (out, o.c_n, o.c_d, o.c_e)
   in
     fprint! (out,
       "(!c", o.c_id, " := b", b.b_id, "[!b", b.b_id, "_r]",
@@ -1477,7 +1532,7 @@ case+ a of
   end
 //
 | ACTcurrent (v0, v, p, o) => let
-    val () = emit_fire (out, o.c_n, o.c_d)
+    val () = emit_fire (out, o.c_n, o.c_d, o.c_e)
     val () = fprint! (out,
       "!c", o.c_id, " := (if !c", p.c_id, " then !c", v.c_id,
       " else (if t = ", o.c_d, " then ")
@@ -1487,8 +1542,15 @@ case+ a of
     fprint! (out, " else !c", o.c_id, "))")
   end
 //
+| ACThold (i, o) => let
+    (* fires on the INPUT's clock, expiration included *)
+    val () = emit_fire (out, i.c_n, i.c_d, i.c_e)
+  in
+    fprint! (out, "!c", o.c_id, " := !c", i.c_id)
+  end
+//
 | ACTactuate (name, c) => let
-    val () = emit_fire (out, c.c_n, c.c_d)
+    val () = emit_fire (out, c.c_n, c.c_d, c.c_e)
   in
     if cpay_isrec (c.c_pay) then let
       val () = fprint! (out,
@@ -1499,7 +1561,7 @@ case+ a of
   end
 //
 | ACTactuate_gated (name, v, p) => let
-    val () = emit_fire (out, v.c_n, v.c_d)
+    val () = emit_fire (out, v.c_n, v.c_d, v.c_e)
   in
     fprint! (out,
       "(if !c", p.c_id, " then ", name, "_actuate (t, !c", v.c_id, "))")
@@ -1650,8 +1712,13 @@ fn ctx_timing
   fun maxd (cs: list0(cell), m: int): int =
     case+ cs of
     | list0_nil () => m
-    | list0_cons (c, cs) =>
-        maxd (cs, if c.c_d > m then c.c_d else m)
+    | list0_cons (c, cs) => let
+        val m = (if c.c_d > m then c.c_d else m): int
+        (* the steady-state window must start past every expiration *)
+        val m = (if c.c_e > m then c.c_e else m): int
+      in
+        maxd (cs, m)
+      end
   val md = maxd (!(ctx.x_cells), 0)
 in
   @(base, hp, md)
@@ -1687,17 +1754,20 @@ val () = fprint! (out,
   "  val b = schedule_begin (", g, ", ", hp, ")\n")
 //
 fun fires
-  (n: int, d: int, t: int): bool =
-  if t >= d then ((t - d) mod n) = 0 else false
+  (n: int, d: int, e: int, t: int): bool =
+  if t >= d then (
+    if (e >= 0) andalso (t >= e) then false
+    else ((t - d) mod n) = 0
+  ) else false
 //
 fun slot_rows
-  (ts: list0(@(string, int, int, int)), t: int, i: int
+  (ts: list0(@(string, int, int, int, int)), t: int, i: int
   ) : list0 (@(int, int, string)) =
 (
   case+ ts of
   | list0_nil () => list0_nil ()
   | list0_cons (tk, ts) =>
-      if fires (tk.1, tk.2, t)
+      if fires (tk.1, tk.2, tk.4, t)
         then list0_cons (@(i, tk.3, tk.0), slot_rows (ts, t, i + 1))
         else slot_rows (ts, t, i + 1)
       // end of [if]
@@ -1749,20 +1819,20 @@ val () = fprint! (out,
   "/* the task table: period, offset, wcet per extern instance.\n",
   " * NOTE: the C backend carries no schedulability certificate;\n",
   " * feasibility is proven only by the ATS backend (or externally). */\n",
-  "typedef struct { const char *name; int period; int offset; int wcet; } ov_task;\n",
+  "typedef struct { const char *name; int period; int offset; int wcet; int expire; } ov_task;\n",
   "static const ov_task overture_tasks[] = {\n")
 fun rows
-  (ts: list0(@(string, int, int, int))): void =
+  (ts: list0(@(string, int, int, int, int))): void =
   case+ ts of
   | list0_nil () => ()
   | list0_cons (tk, ts) => let
       val () = fprint! (out,
-        "  { \"", tk.0, "\", ", tk.1, ", ", tk.2, ", ", tk.3, " },\n")
+        "  { \"", tk.0, "\", ", tk.1, ", ", tk.2, ", ", tk.3, ", ", tk.4, " },\n")
     in
       rows (ts)
     end
 val () = rows (tasks)
-val () = fprint! (out, "  { 0, 0, 0, 0 }\n};\n")
+val () = fprint! (out, "  { 0, 0, 0, 0, 0 }\n};\n")
 val () = fprint! (out,
   "static const int overture_ntasks = ", n, ";\n\n")
 //
@@ -2118,8 +2188,10 @@ fn emit_fval_c
 ) (* end of [emit_fval_c] *)
 
 fn emit_fire_c
-  (out: FILEref, n: int, d: int): void =
-  fprint! (out, "if (fire(t, ", n, ", ", d, ")) ")
+  (out: FILEref, n: int, d: int, e: int): void =
+  if e >= 0
+    then fprint! (out, "if (fire(t, ", n, ", ", d, ") && t < ", e, ") ")
+    else fprint! (out, "if (fire(t, ", n, ", ", d, ")) ")
 
 fn emit_action_c
   (out: FILEref, a: action): void =
@@ -2127,7 +2199,7 @@ fn emit_action_c
 case+ a of
 //
 | ACTsense (name, c) => let
-    val () = emit_fire_c (out, c.c_n, c.c_d)
+    val () = emit_fire_c (out, c.c_n, c.c_d, c.c_e)
   in
     if cpay_isrec (c.c_pay)
       then fprint! (out, name, "_sense(t, &c", c.c_id, ");")
@@ -2140,7 +2212,7 @@ case+ a of
         case+ (args, outs) of
         | (list0_cons (b, list0_cons (x, list0_cons (y, list0_nil ()))),
            list0_cons (o, list0_nil ())) => let
-            val () = emit_fire_c (out, o.c_n, o.c_d)
+            val () = emit_fire_c (out, o.c_n, o.c_d, o.c_e)
             val () = fprint! (out, "c", o.c_id, " = (")
             val () = emit_fval_c (out, b)
             val () = fprint! (out, " ? ")
@@ -2172,7 +2244,7 @@ case+ a of
         | list0_cons (o0, list0_nil ())
             when cpay_isrec (o0.c_pay) => let
             (* the out record is the last parameter, by pointer *)
-            val () = emit_fire_c (out, o0.c_n, o0.c_d)
+            val () = emit_fire_c (out, o0.c_n, o0.c_d, o0.c_e)
             val () = fprint! (out, name, "(")
             val () = cargs (args, true)
             val () = (
@@ -2183,14 +2255,14 @@ case+ a of
             fprint! (out, "&c", o0.c_id, ");")
           end
         | list0_cons (o0, list0_nil ()) => let
-            val () = emit_fire_c (out, o0.c_n, o0.c_d)
+            val () = emit_fire_c (out, o0.c_n, o0.c_d, o0.c_e)
             val () = fprint! (out, "c", o0.c_id, " = ", name, "(")
             val () = cargs (args, true)
           in
             fprint! (out, ");")
           end
         | list0_cons (o0, _) => let
-            val () = emit_fire_c (out, o0.c_n, o0.c_d)
+            val () = emit_fire_c (out, o0.c_n, o0.c_d, o0.c_e)
             val () = fprint! (out, name, "(")
             val () = cargs (args, true)
             fun couts
@@ -2216,7 +2288,7 @@ case+ a of
   )
 //
 | ACTcopy (fv, o) => let
-    val () = emit_fire_c (out, o.c_n, o.c_d)
+    val () = emit_fire_c (out, o.c_n, o.c_d, o.c_e)
     val () = fprint! (out, "c", o.c_id, " = ")
     val () = emit_fval_c (out, fv)
   in
@@ -2224,27 +2296,27 @@ case+ a of
   end
 //
 | ACTfbyemit (v0, st, o) => let
-    val () = emit_fire_c (out, o.c_n, o.c_d)
+    val () = emit_fire_c (out, o.c_n, o.c_d, o.c_e)
   in
     fprint! (out,
       "c", o.c_id, " = (t == ", o.c_d, ") ? ", v0, " : c", st.c_id, ";")
   end
 //
 | ACTfbystore (i, st) => let
-    val () = emit_fire_c (out, i.c_n, i.c_d)
+    val () = emit_fire_c (out, i.c_n, i.c_d, i.c_e)
   in
     fprint! (out, "c", st.c_id, " = c", i.c_id, ";")
   end
 //
 | ACTconsemit (v0, i, o) => let
-    val () = emit_fire_c (out, o.c_n, o.c_d)
+    val () = emit_fire_c (out, o.c_n, o.c_d, o.c_e)
   in
     fprint! (out,
       "c", o.c_id, " = (t == ", o.c_d, ") ? ", v0, " : c", i.c_id, ";")
   end
 //
 | ACTbufwrite (i, b) => let
-    val () = emit_fire_c (out, i.c_n, i.c_d)
+    val () = emit_fire_c (out, i.c_n, i.c_d, i.c_e)
   in
     fprint! (out,
       "{ b", b.b_id, "[b", b.b_id, "_w] = c", i.c_id,
@@ -2252,7 +2324,7 @@ case+ a of
   end
 //
 | ACTbufread (b, o) => let
-    val () = emit_fire_c (out, o.c_n, o.c_d)
+    val () = emit_fire_c (out, o.c_n, o.c_d, o.c_e)
   in
     fprint! (out,
       "{ c", o.c_id, " = b", b.b_id, "[b", b.b_id, "_r]",
@@ -2260,15 +2332,21 @@ case+ a of
   end
 //
 | ACTcurrent (v0, v, p, o) => let
-    val () = emit_fire_c (out, o.c_n, o.c_d)
+    val () = emit_fire_c (out, o.c_n, o.c_d, o.c_e)
   in
     fprint! (out,
       "c", o.c_id, " = c", p.c_id, " ? c", v.c_id,
       " : ((t == ", o.c_d, ") ? ", v0, " : c", o.c_id, ");")
   end
 //
+| ACThold (i, o) => let
+    val () = emit_fire_c (out, i.c_n, i.c_d, i.c_e)
+  in
+    fprint! (out, "c", o.c_id, " = c", i.c_id, ";")
+  end
+//
 | ACTactuate (name, c) => let
-    val () = emit_fire_c (out, c.c_n, c.c_d)
+    val () = emit_fire_c (out, c.c_n, c.c_d, c.c_e)
   in
     if cpay_isrec (c.c_pay)
       then fprint! (out, name, "_actuate(t, &c", c.c_id, ");")
@@ -2276,7 +2354,7 @@ case+ a of
   end
 //
 | ACTactuate_gated (name, v, p) => let
-    val () = emit_fire_c (out, v.c_n, v.c_d)
+    val () = emit_fire_c (out, v.c_n, v.c_d, v.c_e)
   in
     fprint! (out,
       "{ if (c", p.c_id, ") ", name, "_actuate(t, c", v.c_id, "); }")
@@ -2723,15 +2801,18 @@ fn emit_action_atsbare
   (out: FILEref, a: action): void = let
 //
 fn firehdr
-  (out: FILEref, n: int, d: int): void =
-  fprint! (out, "  val () = if fire (t, ", n, ", ", d, ") then ")
+  (out: FILEref, n: int, d: int, e: int): void =
+  if e >= 0
+    then fprint! (out,
+      "  val () = if (fire (t, ", n, ", ", d, ")) andalso (t < ", e, ") then ")
+    else fprint! (out, "  val () = if fire (t, ", n, ", ", d, ") then ")
 //
 in
 //
 case+ a of
 //
 | ACTsense (name, c) => let
-    val () = firehdr (out, c.c_n, c.c_d)
+    val () = firehdr (out, c.c_n, c.c_d, c.c_e)
   in
     if cpay_isrec (c.c_pay) then let
       val () = fprint! (out,
@@ -2750,7 +2831,7 @@ case+ a of
             val () = if cpay_isrec (o.c_pay) then cgerr
               ("codegen: merge over record flows is not yet supported by ats-bare")
             val bc = fval_cell (b, "merge")
-            val () = firehdr (out, o.c_n, o.c_d)
+            val () = firehdr (out, o.c_n, o.c_d, o.c_e)
             val () = fprint! (out,
               "cell_set_", o.c_id, " (if cell_get_", bc.c_id, " () then ")
             val () = emit_atsfval (out, x)
@@ -2765,7 +2846,7 @@ case+ a of
         case+ outs of
         | list0_cons (o0, list0_nil ())
             when fvals_anyrec (args) orelse cpay_isrec (o0.c_pay) => let
-            val () = firehdr (out, o0.c_n, o0.c_d)
+            val () = firehdr (out, o0.c_n, o0.c_d, o0.c_e)
             val () = fprint! (out, "let ")
             fun decls (args: list0(fval), i: int): void =
               case+ args of
@@ -2825,7 +2906,7 @@ case+ a of
             fprint! (out, ") end")
           end
         | list0_cons (o0, list0_nil ()) => let
-            val () = firehdr (out, o0.c_n, o0.c_d)
+            val () = firehdr (out, o0.c_n, o0.c_d, o0.c_e)
             val () = fprint! (out, "cell_set_", o0.c_id, " (", name, " (")
             fun loop (args: list0(fval), first: bool): void =
               case+ args of
@@ -2848,7 +2929,7 @@ case+ a of
   )
 //
 | ACTcopy (fv, o) => let
-    val () = firehdr (out, o.c_n, o.c_d)
+    val () = firehdr (out, o.c_n, o.c_d, o.c_e)
   in
     if cpay_isrec (o.c_pay) then let
       val c = fval_cell (fv, "copy")
@@ -2865,7 +2946,7 @@ case+ a of
   end
 //
 | ACTfbyemit (v0, st, o) => let
-    val () = firehdr (out, o.c_n, o.c_d)
+    val () = firehdr (out, o.c_n, o.c_d, o.c_e)
     val () = fprint! (out,
       "cell_set_", o.c_id, " (if t = ", o.c_d, " then ")
     val () = emit_atsint (out, v0)
@@ -2874,13 +2955,13 @@ case+ a of
   end
 //
 | ACTfbystore (i, st) => let
-    val () = firehdr (out, i.c_n, i.c_d)
+    val () = firehdr (out, i.c_n, i.c_d, i.c_e)
   in
     fprint! (out, "cell_set_", st.c_id, " (cell_get_", i.c_id, " ())")
   end
 //
 | ACTconsemit (v0, i, o) => let
-    val () = firehdr (out, o.c_n, o.c_d)
+    val () = firehdr (out, o.c_n, o.c_d, o.c_e)
     val () = fprint! (out,
       "cell_set_", o.c_id, " (if t = ", o.c_d, " then ")
     val () = emit_atsint (out, v0)
@@ -2889,19 +2970,19 @@ case+ a of
   end
 //
 | ACTbufwrite (i, b) => let
-    val () = firehdr (out, i.c_n, i.c_d)
+    val () = firehdr (out, i.c_n, i.c_d, i.c_e)
   in
     fprint! (out, "buf_write_", b.b_id, " (cell_get_", i.c_id, " ())")
   end
 //
 | ACTbufread (b, o) => let
-    val () = firehdr (out, o.c_n, o.c_d)
+    val () = firehdr (out, o.c_n, o.c_d, o.c_e)
   in
     fprint! (out, "cell_set_", o.c_id, " (buf_read_", b.b_id, " ())")
   end
 //
 | ACTcurrent (v0, v, pc, o) => let
-    val () = firehdr (out, o.c_n, o.c_d)
+    val () = firehdr (out, o.c_n, o.c_d, o.c_e)
     val () = fprint! (out,
       "cell_set_", o.c_id, " (if cell_get_", pc.c_id,
       " () then cell_get_", v.c_id, " () else (if t = ", o.c_d, " then ")
@@ -2910,8 +2991,20 @@ case+ a of
     fprint! (out, " else cell_get_", o.c_id, " ()))")
   end
 //
+| ACThold (i, o) => let
+    val () = firehdr (out, i.c_n, i.c_d, i.c_e)
+  in
+    if cpay_isrec (o.c_pay) then let
+      val () = fprint! (out,
+        "let var v: ", ctystr (o.c_pay), " in (cell_get_", i.c_id,
+        " (v); cell_set_", o.c_id, " (v)) end")
+    in end
+    else fprint! (out,
+      "cell_set_", o.c_id, " (cell_get_", i.c_id, " ())")
+  end
+//
 | ACTactuate (name, c) => let
-    val () = firehdr (out, c.c_n, c.c_d)
+    val () = firehdr (out, c.c_n, c.c_d, c.c_e)
   in
     if cpay_isrec (c.c_pay) then let
       val () = fprint! (out,
@@ -2922,7 +3015,7 @@ case+ a of
   end
 //
 | ACTactuate_gated (name, v, pc) => let
-    val () = firehdr (out, v.c_n, v.c_d)
+    val () = firehdr (out, v.c_n, v.c_d, v.c_e)
   in
     fprint! (out,
       "(if cell_get_", pc.c_id, " () then ",
@@ -3216,16 +3309,19 @@ val () = fprint! (out,
   " = \"ext#overture_the_schedule\"\n\n",
   "implement overture_the_schedule () = let\n",
   "  val b = schedule_begin (", g, ", ", hp, ")\n")
-fun fires2 (n: int, d: int, t: int): bool =
-  if t >= d then ((t - d) mod n) = 0 else false
+fun fires2 (n: int, d: int, e: int, t: int): bool =
+  if t >= d then (
+    if (e >= 0) andalso (t >= e) then false
+    else ((t - d) mod n) = 0
+  ) else false
 fun slotrows
-  (ts: list0(@(string, int, int, int)), t: int, i: int
+  (ts: list0(@(string, int, int, int, int)), t: int, i: int
   ) : list0 (@(int, int, string)) =
 (
   case+ ts of
   | list0_nil () => list0_nil ()
   | list0_cons (tk, ts) =>
-      if fires2 (tk.1, tk.2, t)
+      if fires2 (tk.1, tk.2, tk.4, t)
         then list0_cons (@(i, tk.3, tk.0), slotrows (ts, t, i + 1))
         else slotrows (ts, t, i + 1)
       // end of [if]
@@ -3300,9 +3396,9 @@ fun sensors
         | T2YPErate (_, elt, clk) => let
             val nd = eval_clk (clk)
           in
-            cell_new (ctx, t2ype_cpay (elt, list0_nil ()), nd.0, nd.1)
+            cell_new (ctx, t2ype_cpay (elt, list0_nil ()), nd.0, nd.1, nd.2)
           end
-        | _ (*rest*) => cell_new (ctx, CPint (), 1, 0)
+        | _ (*rest*) => cell_new (ctx, CPint (), 1, 0, ~1)
       ) : cell
       val () = emit_pre (ctx, ACTsense (name, c))
       val r = ctx.x_senses

@@ -113,6 +113,26 @@ else
   echo "FAIL codegen/when (generate/compile/run)"
 fi
 
+# expiring clocks: the warmup task stops firing at its expiration,
+# hold latches the last value, both backends agree byte for byte
+if codegen_build expire_hold && "$gendir/expire_hold" 200 > "$gendir/expire_hold.out" \
+   && codegen_build_c expire_hold \
+   && "$gendir/expire_hold_c" 200 > "$gendir/expire_hold_c.out"; then
+  if grep -q '^\[t=40\] a = 80$' "$gendir/expire_hold.out" \
+     && grep -q '^\[t=50\] a = 90$' "$gendir/expire_hold.out" \
+     && grep -q '^\[t=100\] a = 140$' "$gendir/expire_hold.out" \
+     && diff -q "$gendir/expire_hold.out" "$gendir/expire_hold_c.out" > /dev/null; then
+    pass=$((pass + 1))
+  else
+    fail=$((fail + 1))
+    echo "FAIL codegen/expire_hold (expiration semantics)"
+    cat "$gendir/expire_hold.out" | sed 's/^/  | /'
+  fi
+else
+  fail=$((fail + 1))
+  echo "FAIL codegen/expire_hold (generate/compile/run)"
+fi
+
 # record flows: both backends, byte-identical transcripts
 if codegen_build record_flow && "$gendir/record_flow" 1000 > "$gendir/record_flow.out" \
    && codegen_build_c record_flow \
